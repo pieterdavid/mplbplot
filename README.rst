@@ -30,7 +30,7 @@ A simple example:
 
     ## draw with mplbplot
     import matplotlib.pyplot as plt
-    import mplbplot.plot ## load decorations
+    import mplbplot.decorateAxes ## object-oriented API
 
     fig,ax = plt.subplots(num="Fig1")
     ax.rhist(h1, histtype="step", color="r")
@@ -41,6 +41,55 @@ More usage examples can be found in `the examples directory
 <https://github.com/pieterdavid/mplbplot/blob/master/examples>`_.
 A more diverse set of plots made with the help of this package
 can be found in `my PhD thesis <http://inspirehep.net/record/1492009>`_.
+
+Three different ways for importing the helper methods can be used
+(they can be freely mixed as well): the first blends nicely with
+matplotlib's object-oriented API, and adds ``rhist``, ``rplot``, etc.
+methods to ``matplotlib.axes.Axes`` when importing ``mplbplot.decorateAxes``, e.g.
+
+.. code:: python
+
+    import ROOT
+    h = ROOT.TH1F("h1", "h1", 10, -5., 5.)
+    h.FillRandom("gaus", 1000)
+
+    from matplotlib import pyplot as plt
+    import mplbplot.decorateAxes ## object-oriented API
+
+    fig,ax = plt.subplots()
+    ax.rhist(h, histtype="step", color="r")
+
+The second adds the equivalent methods to the ``matplotlib.pyplot`` module, e.g.
+
+.. code:: python
+
+    import ROOT
+    h = ROOT.TH1F("h1", "h1", 10, -5., 5.)
+    h.FillRandom("gaus", 1000)
+
+    from matplotlib import pyplot as plt
+    import mplbplot.decoratePyplot ## pyplot decorators
+
+    fig,ax = plt.subplots()
+    plt.rhist(h, histtype="step", color="b")
+
+The ``mplbplot.pyplot`` module provides wrapper methods that check
+if the first argument is a ROOT object, take the custom implementation
+in that case, or fall back to the corresponding ``matplotlib.pyplot``
+method otherwise, the example can then be written as
+
+.. code:: python
+
+    import ROOT
+    h = ROOT.TH1F("h1", "h1", 10, -5., 5.)
+    h.FillRandom("gaus", 1000)
+
+    from matplotlib.pyplot import *
+    from mplbplot.pyplot import *
+
+    fig,ax = subplots()
+    hist(h, histtype="step", color="g")
+
 
 Code overview
 -------------
@@ -66,36 +115,11 @@ where several bin or point properties
 or point coordinates and uncertainties)
 are often iterated over together, in ``zip`` mode.
 
-The drawing methods can be added automatically as
-``rhist`` (only for ``TH1``),
-``rplot``, ``rerrorbar`` (for ``TH1`` and ``TGraph``),
-``rtext`` (for ``TH1`` and ``TH2``, ...),
-``rcontour``, ``rcontourf``, and ``rpcolor`` (only for ``TH2``)
-to both ``matplotlib.pyplot`` and ``matplotlib.axes.Axes``
-with ``import mplbplot.plot``, e.g.
+The helper methods can be accessed in three ways, depending on the
+matplotlib API choice, and the preference for making the difference
+between the ``matplotlib`` and ``mplbplot`` methods explicit or not.
+See above for an example of each.
 
-.. code:: python
-
-    import ROOT
-    h = ROOT.TH1F("h1", "h1", 10, -5., 5.)
-    h.FillRandom("gaus", 1000)
-
-    from matplotlib import pyplot as plt
-    import mplbplot.plot ## load decorations
-
-    fig,ax = plt.subplots()
-    ax.rhist(h, histtype="step", color="r")
-
-Alternatively, they can directly be imported and used,
-with the ``axes`` to use passed as a keyword argument, e.g.
-
-.. code:: python
-
-    from matplotlib import pyplot as plt
-    from mplbplot.draw_th1 import hist
-
-    fig,ax = plt.subplots()
-    hist(h, histtype="step", color="r", axes=ax)
 
 Finally, the ``mplbplot.plothelpers`` module contains a collection of
 components (tick label formatters etc.) and methods that may be useful

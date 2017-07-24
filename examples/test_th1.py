@@ -9,7 +9,7 @@ if __name__ == "__main__":
     import ROOT
     from ROOT import TH1F, TCanvas
     from matplotlib import pyplot as plt
-    import mplbplot.plot ## load decorations
+    import mplbplot.decorateAxes ## object-oriented API
     import matplotlib.ticker
 
     ## TEST hist
