@@ -45,7 +45,8 @@ def errorbar( graph, axes=None, xErrors=True, kind="bar", removeZero=False, **kw
         return axes.fill_between( x, yLow, y2=yHigh, **kwargs )
 
 def _addDecorations():
-    """ used by mplbplot.plot for loading all decorations """
+    """ load decorators for draw methods that need dispatch """
+
     import ROOT
     ROOT.TGraph.__plot__ = plot
     ROOT.TGraph.__errorbar__ = errorbar
