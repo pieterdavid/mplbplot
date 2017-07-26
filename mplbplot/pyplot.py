@@ -28,7 +28,7 @@ Available methods:
 __all__ = ("hist", "plot", "errorbar", "text", "contour", "contourf", "pcolor")
 
 import matplotlib.pyplot as plt
-import ROOT
+from cppyy import gbl
 
 import .draw_th1
 import .draw_th2
@@ -42,7 +42,7 @@ def plot(first, *args, **kwargs):
 
     see TH1.__plot__, TGraph.__plot__, or matplotlib.pyplot.plot for details
     """
-    if isinstance(first, ROOT.TH1) or isinstance(first, ROOT.TGraph):
+    if isinstance(first, gbl.TH1) or isinstance(first, gbl.TGraph):
         kwargs["axes"] = plt.gca()
         return first.__plot__(*args, **kwargs)
     else:
@@ -54,7 +54,7 @@ def errorbar(first, *args, **kwargs):
 
     see TH1.__errorbar__, TGraph.__errorbar__, or matplotlib.pyplot.errorbar for details
     """
-    if isinstance(first, ROOT.TH1) or isinstance(first, ROOT.TGraph):
+    if isinstance(first, gbl.TH1) or isinstance(first, gbl.TGraph):
         kwargs["axes"] = plt.gca()
         return first.__errorbar__(*args, **kwargs)
     else:
@@ -66,7 +66,7 @@ def text(first, *args, **kwargs):
 
     see TH1.__text__, TH2.__text__, TGraph.__text__, or matplotlib.pyplot.text for details
     """
-    if isinstance(first, ROOT.TH1) or isinstance(first, ROOT.TGraph):
+    if isinstance(first, gbl.TH1) or isinstance(first, gbl.TGraph):
         kwargs["axes"] = plt.gca()
         return first.__text__(*args, **kwargs)
     else:
@@ -78,7 +78,7 @@ def hist(first, *args, **kwargs):
 
     see mplbplot.draw_th1.hist or matplotlib.pyplot.hist for details
     """
-    if isinstance(first, ROOT.TH1):
+    if isinstance(first, gbl.TH1):
         kwargs["axes"] = plt.gca()
         return draw_th1.hist(first, *args, **kwargs)
     else:
@@ -90,7 +90,7 @@ def contour(first, *args, **kwargs):
 
     see mplbplot.draw_th2.contour or matplotlib.pyplot.contour for details
     """
-    if isinstance(first, ROOT.TH2):
+    if isinstance(first, gbl.TH2):
         kwargs["axes"] = plt.gca()
         return draw_th2.contour(first, *args, **kwargs)
     else:
@@ -102,7 +102,7 @@ def contourf(first, *args, **kwargs):
 
     see mplbplot.draw_th2.contourf or matplotlib.pyplot.contourf for details
     """
-    if isinstance(first, ROOT.TH2):
+    if isinstance(first, gbl.TH2):
         kwargs["axes"] = plt.gca()
         return draw_th2.contourf(first, *args, **kwargs)
     else:
@@ -114,7 +114,7 @@ def pcolor(first, *args, **kwargs):
 
     see mplbplot.draw_th2.pcolor or matplotlib.pyplot.pcolor for details
     """
-    if isinstance(first, ROOT.TH2):
+    if isinstance(first, gbl.TH2):
         kwargs["axes"] = plt.gca()
         return draw_th2.pcolor(first, *args, **kwargs)
     else:
