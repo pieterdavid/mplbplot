@@ -227,8 +227,8 @@ class ShapeSystVar(SystVar):
                 fullpath = self.hist.tfile.GetPath().split(":")[0]
                 variPath = os.path.join(os.path.dirname(fullpath), "{0}__{1}{2}.root".format(os.path.splitext(os.path.basename(fullpath))[0], self.systVar.name, vari))
                 if os.path.exists(variPath):
-                    import ROOT
-                    vf = ROOT.TFile.Open(variPath)
+                    from cppyy import gbl
+                    vf = gbl.TFile.Open(variPath)
                     if ( not vf ) or vf.IsZombie() or ( not vf.IsOpen() ):
                         raise IOError("Could not open file '{}' correctly".format(variPath))
                     if vf.Get(self.hist.name):
@@ -252,7 +252,8 @@ class ShapeSystVar(SystVar):
 if __name__ == "__main__": ## quick test of the basic functionality
     import ROOT
     ROOT.PyConfig.IgnoreCommandLineOptions = True
-    aHist = HistoKey(ROOT.TFile.Open("aFile"), "aName", scale=.5) ## aName__frup and aName__frdown are assumed to be also there
+    from cppyy import gbl
+    aHist = HistoKey(gbl.TFile.Open("aFile"), "aName", scale=.5) ## aName__frup and aName__frdown are assumed to be also there
     print aHist.obj
     systTab = {"fr" : ShapeSystVar("fr"), "lumi" : ConstantSystVar(1.06)}
     histSysTab = SystVarsForHist(aHist, systTab)

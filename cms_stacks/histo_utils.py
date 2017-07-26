@@ -8,11 +8,11 @@ __all__ = ("cloneHist", "addOverflow",
 from itertools import izip, count, chain
 import numpy as np
 
-import ROOT
-ROOT.TH1.AddDirectory(False)
+from cppyy import gbl
+gbl.TH1.AddDirectory(False)
 
 def cloneHist(hist, newName=None):
-    if ROOT.TH1.AddDirectoryStatus():
+    if gbl.TH1.AddDirectoryStatus():
         raise AssertionError("Cannot clone histograms as free objects when TH1::AddDirectoryStatus is True")
     return ( hist.Clone(newName) if newName else hist.Clone() )
 
