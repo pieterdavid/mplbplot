@@ -111,38 +111,6 @@ def text( histo, formatFun="{0:.0f}".format, axes=None, empty=False, useEdgeX=No
     return list( axes.text(getX(b), getY(b), formatFun(b), **kwargs) for b in bins(histo) if empty or b.content != 0. )
 
 def _addDecorations():
-    """ used by mplbplot.plot for loading all decorations """
-    import matplotlib.axes
-    import matplotlib.pyplot as plt
-    # decorate ax.rcontour(hist, ...), plt.rcontour(hist, ...)
-    def rcontour_ax(self, obj, *args, **kwargs):
-        return contour(obj, *args, axes=self, **kwargs)
-    rcontour_ax.__doc__ = contour.__doc__
-    matplotlib.axes.Axes.rcontour = rcontour_ax
-    def rcontour_plt(obj, *args, **kwargs):
-        return contour(obj, *args, axes=plt.gca(), **kwargs)
-    rcontour_plt.__doc__ = contour.__doc__
-    plt.rcontour = rcontour_plt
-    # decorate ax.rcontourf(hist, ...), plt.rcontourf(hist, ...)
-    def rcontourf_ax(self, obj, *args, **kwargs):
-        return contourf(obj, *args, axes=self, **kwargs)
-    rcontourf_ax.__doc__ = contourf.__doc__
-    rcontourf_ax.__doc__ = contourf.__doc__
-    matplotlib.axes.Axes.rcontourf = rcontourf_ax
-    def rcontourf_plt(obj, *args, **kwargs):
-        return contourf(obj, *args, axes=plt.gca(), **kwargs)
-    rcontourf_plt.__doc__ = contourf.__doc__
-    plt.rcontourf = rcontourf_plt
-    # decorate ax.rpcolor(hist, ...), plt.rpcolor(hist, ...)
-    def rpcolor_ax(self, obj, *args, **kwargs):
-        return pcolor(obj, *args, axes=self, **kwargs)
-    rpcolor_ax.__doc__ = pcolor.__doc__
-    matplotlib.axes.Axes.rpcolor = rpcolor_ax
-    def rpcolor_plt(obj, *args, **kwargs):
-        return pcolor(obj, *args, axes=plt.gca(), **kwargs)
-    rpcolor_plt.__doc__ = pcolor.__doc__
-    plt.rpcolor = rpcolor_plt
-
+    """ load decorators for draw methods that need dispatch """
     import ROOT
-
     ROOT.TH2.__text__ = text

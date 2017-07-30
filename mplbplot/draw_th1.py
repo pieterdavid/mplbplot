@@ -137,18 +137,7 @@ def text( histo, formatFun="{0:.0f}".format, axes=None, empty=False, volume=Fals
     return list( axes.text(getX(b), height(b), formatFun(b), **kwargs) for b in bins(histo) if empty or b.content != 0. )
 
 def _addDecorations():
-    """ used by mplbplot.plot for loading all decorations """
-    import matplotlib.axes
-    import matplotlib.pyplot as plt
-    # decorate ax.rhist(hist, ...), plt.rhist(hist, ...)
-    def rhist_ax(self, obj, *args, **kwargs):
-        return hist(obj, *args, axes=self, **kwargs)
-    rhist_ax.__doc__ = hist.__doc__
-    matplotlib.axes.Axes.rhist = rhist_ax
-    def rhist_plt(obj, *args, **kwargs):
-        return hist(obj, *args, axes=plt.gca(), **kwargs)
-    rhist_plt.__doc__ = hist.__doc__
-    plt.rhist = rhist_plt
+    """ load decorators for draw methods that need dispatch """
 
     # placeholder to block rplot(TH2) etc.
     def _onlyForTH1():
