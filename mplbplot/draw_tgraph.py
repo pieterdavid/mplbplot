@@ -47,6 +47,6 @@ def errorbar( graph, axes=None, xErrors=True, kind="bar", removeZero=False, **kw
 def _addDecorations():
     """ load decorators for draw methods that need dispatch """
 
-    import ROOT
-    ROOT.TGraph.__plot__ = plot
-    ROOT.TGraph.__errorbar__ = errorbar
+    from cppyy import gbl
+    gbl.TGraph.__plot__ = plot
+    gbl.TGraph.__errorbar__ = errorbar

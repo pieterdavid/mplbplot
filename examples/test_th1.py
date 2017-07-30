@@ -6,8 +6,8 @@ __author__ = "Pieter David <pieter.david@gmail.com>"
 ## TODO make a notebook out of this?
 
 if __name__ == "__main__":
-    import ROOT
-    from ROOT import TH1F, TCanvas
+    from cppyy import gbl
+    from cppyy.gbl import TH1F, TCanvas
     from matplotlib import pyplot as plt
     import mplbplot.decorateAxes ## object-oriented API
     import matplotlib.ticker
@@ -15,7 +15,7 @@ if __name__ == "__main__":
     ## TEST hist
     h1 = TH1F("aHisto", "A histogram", 20, -5., 5.)
     h1.FillRandom("gaus", 250)
-    h1.SetLineColor(ROOT.kRed)
+    h1.SetLineColor(gbl.kRed)
     c1 = TCanvas("c1", "First canvas")
     h1.GetXaxis().SetRangeUser(-5.,5.)
     h1.Draw("HIST")
@@ -28,7 +28,7 @@ if __name__ == "__main__":
     ## now a stack
     h2 = TH1F("anotherHisto", "Another histogram", 20, -5., 5.)
     h2.FillRandom("gaus", 100)
-    from ROOT import THStack
+    from cppyy.gbl import THStack
     st = THStack("aStack", "Stacked histograms")
     st.Add(h1, "H")
     st.Add(h2, "H")
@@ -42,8 +42,8 @@ if __name__ == "__main__":
 
     h3 = TH1F("thirdHisto", "A histogram", 20, -5., 5.)
     h3.FillRandom("gaus", 250)
-    h3.SetLineColor(ROOT.kRed)
-    h3.SetMarkerStyle(ROOT.kCircle)
+    h3.SetLineColor(gbl.kRed)
+    h3.SetMarkerStyle(gbl.kCircle)
     c3 = TCanvas("c3", "Third canvas")
     h3.GetXaxis().SetRangeUser(-5.,5.)
     h3.Draw("PL")
@@ -55,8 +55,8 @@ if __name__ == "__main__":
 
     h4 = TH1F("fourthHisto", "A histogram", 20, -5., 5.)
     h4.FillRandom("gaus", 250)
-    h4.SetLineColor(ROOT.kRed)
-    h4.SetMarkerStyle(ROOT.kCircle)
+    h4.SetLineColor(gbl.kRed)
+    h4.SetMarkerStyle(gbl.kCircle)
     c4 = TCanvas("c4", "Fourth canvas")
     h4.GetXaxis().SetRangeUser(-5.,5.)
     h4.Draw("E2")

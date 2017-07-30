@@ -9,5 +9,5 @@ __version__ = "0.1.0"
 
 ## workaround for a problem with loading of graphics libraries
 ## make sure we don't import matplotlib before ROOT
-import ROOT
-ROOT.kTRUE
+from cppyy import gbl
+gbl.kTRUE

@@ -117,8 +117,8 @@ class HistoFile(PlotStyle):
             else:
                 self.yields_group = self.path ## FIXME path
 
-        import ROOT
-        self._tf = ROOT.TFile.Open(self.path)
+        from cppyy import gbl
+        self._tf = gbl.TFile.Open(self.path)
     def getKey(self, name, **kwargs):
         return HistoKey(self._tf, name, **kwargs)
 

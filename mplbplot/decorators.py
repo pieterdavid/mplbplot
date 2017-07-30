@@ -23,18 +23,18 @@ def points(graph):
 
 from itertools import product
 
-import ROOT
+from cppyy import gbl
 
-axisBinDescriptors = { "center"   : ROOT.TAxis.GetBinCenter
-                     , "lowEdge"  : ROOT.TAxis.GetBinLowEdge
-                     , "upEdge"   : ROOT.TAxis.GetBinUpEdge
-                     , "width"    : ROOT.TAxis.GetBinWidth
-                     , "label"    : ROOT.TAxis.GetBinLabel
+axisBinDescriptors = { "center"   : gbl.TAxis.GetBinCenter
+                     , "lowEdge"  : gbl.TAxis.GetBinLowEdge
+                     , "upEdge"   : gbl.TAxis.GetBinUpEdge
+                     , "width"    : gbl.TAxis.GetBinWidth
+                     , "label"    : gbl.TAxis.GetBinLabel
                      }
-histBinDescriptors = { "content"  : ROOT.TH1.GetBinContent
-                     , "error"    : ROOT.TH1.GetBinError
-                     , "lowError" : ROOT.TH1.GetBinErrorLow
-                     , "upError"  : ROOT.TH1.GetBinErrorUp
+histBinDescriptors = { "content"  : gbl.TH1.GetBinContent
+                     , "error"    : gbl.TH1.GetBinError
+                     , "lowError" : gbl.TH1.GetBinErrorLow
+                     , "upError"  : gbl.TH1.GetBinErrorUp
                      }
 
 # trivial helper: add doc and return (for lambdas) 
@@ -42,11 +42,11 @@ def _addDoc(obj, doc=None):
     obj.__doc__ = doc
     return obj
 
-graphPointDescriptorsPerAxis = { "{0}"          : lambda ax : _addDoc( ( lambda self,i : getattr(ROOT.TGraph, "Get{0}".format(ax.upper()))(self)[i] ),
-                                                                        doc="lambda g,i : ROOT.TGraph.Get{0}(g)[i]".format(ax.upper()) )
-                               , "{0}Error"     : lambda ax : getattr(ROOT.TGraph, "GetError{0}".format(ax.upper())) 
-                               , "{0}HighError" : lambda ax : getattr(ROOT.TGraph, "GetError{0}high".format(ax.upper())) 
-                               , "{0}LowError"  : lambda ax : getattr(ROOT.TGraph, "GetError{0}low".format(ax.upper())) 
+graphPointDescriptorsPerAxis = { "{0}"          : lambda ax : _addDoc( ( lambda self,i : getattr(gbl.TGraph, "Get{0}".format(ax.upper()))(self)[i] ),
+                                                                        doc="lambda g,i : gbl.TGraph.Get{0}(g)[i]".format(ax.upper()) )
+                               , "{0}Error"     : lambda ax : getattr(gbl.TGraph, "GetError{0}".format(ax.upper())) 
+                               , "{0}HighError" : lambda ax : getattr(gbl.TGraph, "GetError{0}high".format(ax.upper())) 
+                               , "{0}LowError"  : lambda ax : getattr(gbl.TGraph, "GetError{0}low".format(ax.upper())) 
                                }
 
 ################################################################################
@@ -138,7 +138,7 @@ class AxisBins1D(object):
 # decorate axis class
 def _taxis_bins(self):
     return AxisBins1D(self)
-ROOT.TAxis.__bins__ = _taxis_bins
+gbl.TAxis.__bins__ = _taxis_bins
 
 ################################################################################
 # One-dimensional histograms                                                   #
@@ -203,9 +203,9 @@ class HistoBins1D(object):
 # decorate 1D histogram classes
 def _th1_bins(self):
     return HistoBins1D(self)
-ROOT.TH1.__bins__ = _th1_bins
+gbl.TH1.__bins__ = _th1_bins
 # placeholder for non-1D subclasses (2D is just below)
-ROOT.TH3.__bins__ = property(lambda: AttributeError("3D histograms are not supported yet"))
+gbl.TH3.__bins__ = property(lambda: AttributeError("3D histograms are not supported yet"))
 
 ################################################################################
 # Two-dimensional histograms                                                   #
@@ -277,7 +277,7 @@ class HistoBins2D(object):
 
 def _th2_bins(self):
     return HistoBins2D(self)
-ROOT.TH2.__bins__ = _th2_bins
+gbl.TH2.__bins__ = _th2_bins
 
 ################################################################################
 # TGraph                                                                       #
@@ -328,4 +328,4 @@ class GraphPoints(object):
 # decorate 1D histogram classes
 def _graph_points(self):
     return GraphPoints(self)
-ROOT.TGraph.__points__ = _graph_points
+gbl.TGraph.__points__ = _graph_points

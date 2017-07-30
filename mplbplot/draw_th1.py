@@ -143,16 +143,16 @@ def _addDecorations():
     def _onlyForTH1():
         raise AttributeError("This method is only for 1D histograms")
 
-    import ROOT
+    from cppyy import gbl
 
-    ROOT.TH1.__plot__ = plot
-    ROOT.TH2.__plot__ = _onlyForTH1
-    ROOT.TH3.__plot__ = _onlyForTH1
+    gbl.TH1.__plot__ = plot
+    gbl.TH2.__plot__ = _onlyForTH1
+    gbl.TH3.__plot__ = _onlyForTH1
 
-    ROOT.TH1.__errorbar__ = errorbar
-    ROOT.TH2.__errorbar__ = _onlyForTH1
-    ROOT.TH3.__errorbar__ = _onlyForTH1
+    gbl.TH1.__errorbar__ = errorbar
+    gbl.TH2.__errorbar__ = _onlyForTH1
+    gbl.TH3.__errorbar__ = _onlyForTH1
 
-    ROOT.TH1.__text__ = text
-    ROOT.TH2.__text__ = _onlyForTH1
-    ROOT.TH3.__text__ = _onlyForTH1
+    gbl.TH1.__text__ = text
+    gbl.TH2.__text__ = _onlyForTH1
+    gbl.TH3.__text__ = _onlyForTH1

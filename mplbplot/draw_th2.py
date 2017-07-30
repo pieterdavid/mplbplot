@@ -112,5 +112,5 @@ def text( histo, formatFun="{0:.0f}".format, axes=None, empty=False, useEdgeX=No
 
 def _addDecorations():
     """ load decorators for draw methods that need dispatch """
-    import ROOT
-    ROOT.TH2.__text__ = text
+    from cppyy import gbl
+    gbl.TH2.__text__ = text
