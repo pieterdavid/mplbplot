@@ -38,7 +38,8 @@ A simple example:
     plt.show()
 
 More usage examples can be found in `the examples directory
-<https://github.com/pieterdavid/mplbplot/blob/master/examples>`_.
+<https://github.com/pieterdavid/mplbplot/blob/master/examples>`_,
+and, as Jupyter notebooks, `here <https://gist.github.com/pieterdavid/ddb47786c59a4db7794f3a66b2588cc8>`_.
 A more diverse set of plots made with the help of this package
 can be found in `my PhD thesis <http://inspirehep.net/record/1492009>`_.
 
