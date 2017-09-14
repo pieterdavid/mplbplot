@@ -21,9 +21,9 @@ class BaseYAMLObject(object):
         return dict((BaseYAMLObject._normalizeAttr(k), v) for k, v in aDict.iteritems())
     def __init__(self, **kwargs):
         if not all( nm in kwargs for nm in self.__class__.required_attributes ):
-            raise KeyError("Attributes {} required but not found".format(", ".join("'{}'".format(k) for k in self.__class__.required_attributes if k not in kwargs)))
+            raise KeyError("Attribute(s) {1} required for class {0} but not found (full dictionary: {2})".format(self.__class__.__name__, ", ".join("'{}'".format(k) for k in self.__class__.required_attributes if k not in kwargs), str(kwargs)))
         if not all( k in self.__class__.required_attributes or k in self.__class__.optional_attributes for k in kwargs.iterkeys() ):
-            raise KeyError("Unknown attribute(s): {}".format(", ".join("'{}'".format(k) for k in kwargs.iterkeys() if k not in self.__class__.required_attributes and k not in self.__class__.optional_attributes)))
+            raise KeyError("Unknown attribute(s) for class {0}: {1} (all attributes: {2})".format(self.__class__.__name__, ", ".join("'{}'".format(k) for k in kwargs.iterkeys() if k not in self.__class__.required_attributes and k not in self.__class__.optional_attributes), str(kwargs)))
         self.__dict__.update(BaseYAMLObject._normalizeKeys(self.__class__.optional_attributes))
         self.__dict__.update(BaseYAMLObject._normalizeKeys(kwargs))
     def __repr__(self):
@@ -127,6 +127,7 @@ class Plot(BaseYAMLObject):
     optional_attributes = {
               "exclude"                   : ""
             , "x-axis"                    : ""
+            , "x-axis-format"             : ""
             , "y-axis"                    : ""
             , "y-axis-format"             : None
             , "normalized"                : False
@@ -157,7 +158,7 @@ class Plot(BaseYAMLObject):
             , "blinded-range"             : None
             , "y-axis-show-zero"          : None
             , "inherits-from"             : None
-            , "rebin"                     : None
+            , "rebin"                     : 1
             , "labels"                    : None
             , "extra-labels"              : None
             , "legend-position"           : None
@@ -173,6 +174,7 @@ class Plot(BaseYAMLObject):
             , "for-yields"                : True
             , "yields-title"              : True
             , "yields-table-order"        : True
+            , "sort-by-yields"            : False
             #
             , "vertical-lines"            : []
             , "horizontal-lines"          : []
@@ -206,7 +208,9 @@ def _load_includes(cfgDict, basePath):
                 vals = v[next(v.iterkeys())]
                 newDict = dict()
                 for iv in vals:
-                    iPath = os.path.join(basePath, vals[0])
+                    iPath = vals[0]
+                    if not os.path.isabs(iPath):
+                        iPath = os.path.join(basePath, iPath)
                     if not os.path.exists(iPath):
                         raise IOError("Included path '{}' does not exist".format(iPath))
                     newDict.update(_plotit_loadWrapper(iPath))
@@ -245,19 +249,38 @@ def makeSystematic(item):
     else:
         raise ValueError("Invalid systematics node, must be either a string or a map")
 
-def plotIt_load(mainPath):
+def _plotIt_histoPath(histoPath, cfgRoot, baseDir):
+    if os.path.isabs(histoPath):
+        return histoPath
+    elif os.path.isabs(cfgRoot):
+        return os.path.join(cfgRoot, histoPath)
+    else:
+        return os.path.join(baseDir, cfgRoot, histoPath)
+
+def plotIt_load(mainPath, histoBaseDir):
     ## load config, with includes
     cfg = _plotit_loadWrapper(mainPath)
     basedir = os.path.dirname(mainPath)
     _load_includes(cfg, basedir)
     plotDefaults = dict((k,v) for k,v in cfg["configuration"].iteritems() if k in ("y-axis-format", "show-overflow", "errors-type"))
     ## construct objects
-    files = odict(sorted(dict((k, HistoFile(path=os.path.join(basedir, k), **v)) for k, v in cfg["files"].iteritems()).iteritems(), key=lambda (k,v) : v.order))
+    files = odict(sorted(dict((k, HistoFile(path=_plotIt_histoPath(k, cfg["configuration"]["root"], histoBaseDir), **v)) for k, v in cfg["files"].iteritems()).iteritems(), key=lambda (k,v) : v.order))
     ## TODO groups
-    plots = dict((k, Plot(name=k, **v)) for k, v in mergeDicts(plotDefaults, cfg.get("plots", {})).iteritems())
+    plots = dict((k, Plot(name=k, **mergeDicts(plotDefaults, v))) for k, v in cfg.get("plots", {}).iteritems())
     systematics = [ makeSystematic(item) for item in cfg.get("systematics", []) ]
 
     return cfg, files, plots, systematics
+
+def getScaleForFile(f, config):
+    """ Infer the scale factor for histograms from the file dict and the overall config """
+    if f.type == "data":
+        return 1.
+    else:
+        mcScale = ( config["luminosity"]*f.cross_section*f.branching_ratio / f.generated_events )
+        if config.get("ignore-scales", False):
+            return mcScale
+        else:
+            return mcScale*config.get("scale", 1.)*f.scale
 
 def plotIt(plots, files, systematics=None, config=None):
     ## default kwargs
@@ -266,10 +289,9 @@ def plotIt(plots, files, systematics=None, config=None):
     if config is None:
         config = dict()
 
-    scaleAndSystematicsPerFile = odict((f, (
-          1. if f.type == "data" else ( ( config["luminosity"]*f.cross_section*f.branching_ratio / f.generated_events ) * ( 1. if config.get("ignore-scales", False) else config.get("scale", 1.)*f.scale ) )
-        , dict((syst.name, syst) for syst in systematics if syst.on(fN, f))
-        )) for fN,f in files.iteritems())
+    scaleAndSystematicsPerFile = odict((f,
+        (getScaleForFile(f, config), dict((syst.name, syst) for syst in systematics if syst.on(fN, f)))
+        ) for fN,f in files.iteritems())
 
     from histstacksandratioplot import THistogramStack, THistogramRatioPlot
     from systematics import SystVarsForHist
@@ -304,8 +326,8 @@ def plotIt(plots, files, systematics=None, config=None):
             theplot.fig.savefig("{0}.{1}".format(pName, ext))
 
 
-def plotItFromYAML(yamlFileName):
-    cfg, files, plots, systematics = plotIt_load(yamlFileName)
+def plotItFromYAML(yamlFileName, histoBaseDir):
+    cfg, files, plots, systematics = plotIt_load(yamlFileName, histoBaseDir)
     ### get list of files, get list of systs, dict of systs per file; then list of plots: for each plot build the stacks and draw
     ## TODO cfg -> config
     plotIt(plots, files, systematics=systematics, config=cfg["configuration"])
