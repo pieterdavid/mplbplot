@@ -108,7 +108,7 @@ class AxisBin1D(object):
         return "AxisBins1D({0})[{1:n}]".format(repr(self._h), self._i)
 
 # AxisBin1D data descriptors
-for name, getter in axisBinDescriptors.iteritems():
+for name, getter in iteritems(axisBinDescriptors):
     prop = BinProperty1(getter, "_i")
     prop.__doc__ = "Bin {n} using ROOT.TAxis.{func}".format(n=name, func=getter.__name__)
     setattr(AxisBin1D, name, prop)

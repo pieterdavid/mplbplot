@@ -20,6 +20,7 @@ import copy
 import numpy as np
 
 from builtins import map, filter
+from future.utils import iteritems
 
 import matplotlib.cbook
 import matplotlib.colors
@@ -44,7 +45,7 @@ class HandlerPolygonAsPathIfEmpty(matplotlib.legend_handler.HandlerPatch):
             origProps = orig_handle.properties()
             props = dict(map( lambda itm : itm if not itm[0].startswith("edge") else (itm[0][4:], itm[1]),
                             filter( lambda itm : itm[0].startswith("line") or itm[0].startswith("edge") or itm[0] in ("label",),
-                                origProps.iteritems())))
+                                iteritems(origProps))))
             ln = matplotlib.lines.Line2D(xy[:,0], xy[:,1], marker=None, **props)
             handler = legend.get_legend_handler(legend.get_legend_handler_map(), ln)
             return handler.create_artists(legend, ln,
