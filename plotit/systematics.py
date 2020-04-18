@@ -1,3 +1,4 @@
+from __future__ import absolute_import, print_function
 """
 Systematics classes (based on plotIt)
 """
@@ -6,7 +7,7 @@ __all__ = ("HistoKey", "SystVarsForHist",
           )
 
 import itertools
-import histo_utils as h1u
+from . import histo_utils as h1u
 
 class HistoKey(object):
     """
@@ -136,7 +137,7 @@ class SystVarsForHist(collections.Mapping):
     def __getitem__(self, ky):
         return self.parent[ky].forHist(self.hist)
     def __iter__(self):
-        for systVar in self.parent.iterkeys():
+        for systVar in self.parent:
             yield systVar
     def __len__(self):
         return len(self.parent)
@@ -234,13 +235,13 @@ class ShapeSystVar(SystVar):
                     if vf.Get(self.hist.name):
                         return self.hist.clone(tfile=vf)
                     else:
-                        print "Could not find '{0}' in file '{1}'".format(self.hist.name, variPath)
+                        print("Could not find '{0}' in file '{1}'".format(self.hist.name, variPath))
                         #raise KeyError()
                 else:
                     pass ## fail quietly
-                    #print "Path '{}' does not exist".format(variPath)
+                    #print("Path '{}' does not exist".format(variPath))
                     #raise IOError("Path '{}' does not exist".format(variPath))
-                #print "Warning: could not find variation hist of {0} for {1}, assuming no variation then".format(self.hist, self.systVar.name)
+                #print("Warning: could not find variation hist of {0} for {1}, assuming no variation then".format(self.hist, self.systVar.name))
                 return self.hist
         def nom(self, i):
             return self.hist.GetBinContent(i)
@@ -254,10 +255,10 @@ if __name__ == "__main__": ## quick test of the basic functionality
     ROOT.PyConfig.IgnoreCommandLineOptions = True
     from cppyy import gbl
     aHist = HistoKey(gbl.TFile.Open("aFile"), "aName", scale=.5) ## aName__frup and aName__frdown are assumed to be also there
-    print aHist.obj
+    print(aHist.obj)
     systTab = {"fr" : ShapeSystVar("fr"), "lumi" : ConstantSystVar(1.06)}
     histSysTab = SystVarsForHist(aHist, systTab)
     systForHist = histSysTab["fr"]
-    print systForHist.nom(3), systForHist.up(3), systForHist.down(3)
+    print(systForHist.nom(3), systForHist.up(3), systForHist.down(3))
     otherSystHi = histSysTab["lumi"]
-    print otherSystHi.nom(3), otherSystHi.up(3), otherSystHi.down(3)
+    print(otherSystHi.nom(3), otherSystHi.up(3), otherSystHi.down(3))

@@ -1,3 +1,4 @@
+from __future__ import absolute_import
 """
 Helper objects for plots with several stacks (e.g. data and and simulation)
 
@@ -5,10 +6,12 @@ WARNING: work in progress, some things are not implemented yet
 """
 
 import numpy as np
-from itertools import chain, izip
+from builtins import zip, range
+from future.utils import iteritems, itervalues
+from itertools import chain
 import collections
 
-import histo_utils as h1u
+from . import histo_utils as h1u
 
 class THistogramStack(collections.Sequence):
     """
@@ -58,6 +61,21 @@ class THistogramStack(collections.Sequence):
                 h.Add(nh.hist.obj)
                 self._stack.append(h)
 
+    @staticmethod
+    def merge(*stacks):
+        """ Merge two or more stacks """
+        if len(stacks) < 2:
+            return stacks[0]
+        else:
+            from .systematics import MemHistoKey
+            mergedSt = THistogramStack()
+            for i,entry in enumerate(stacks[0].entries):
+                newHist = h1u.cloneHist(entry.hist.obj)
+                for stck in stacks[1:]:
+                    newHist.Add(stck.entries[i].hist.obj)
+                mergedSt.add(MemHistoKey(newHist), label=entry.label, systVars=entry.systVars, drawOpts=entry.drawOpts)
+            return mergedSt
+
     ## sequence methods -> stacked list
     def __getitem__(self, i):
         return self.stacked[i]
@@ -69,7 +87,7 @@ class THistogramStack(collections.Sequence):
 
         systVarNames: systematic variations to consider (if None, all that are present are used for each histogram)
         """
-        return set(chain.from_iterable(contrib.systVars.iterkeys() for contrib in self._entries))
+        return set(chain.from_iterable(contrib.systVars for contrib in self._entries))
 
     def getTotalSystematics(self, systVarNames=None):
         """ Get the combined systematics
@@ -77,13 +95,14 @@ class THistogramStack(collections.Sequence):
         systVarNames: systematic variations to consider (if None, all that are present are used for each histogram)
         """
         nBins = self.stackTotal.GetNbinsX()
-        binRange = xrange(1,nBins+1) ## no overflow or underflow
+        binRange = range(1,nBins+1) ## no overflow or underflow
 
         if systVarNames is None:
             systVarNames = self._defaultSystVarNames()
 
         systPerBin = dict((vn, np.zeros((nBins,))) for vn in systVarNames) ## including overflows
-        for systN, systInBins in systPerBin.iteritems():
+        systInteg = 0. ## TODO FIXME
+        for systN, systInBins in iteritems(systPerBin):
             for contrib in self._entries:
                 if systN == "lumi": ## TODO like this ?
                     pass
@@ -91,9 +110,11 @@ class THistogramStack(collections.Sequence):
                     syst = contrib.systVars[systN]
                     maxVarPerBin = np.array([ max(abs(syst.up(i)-syst.nom(i)), abs(syst.down(i)-syst.nom(i))) for i in iter(binRange) ])
                     systInBins += maxVarPerBin
-                    systInteg = np.sum(maxVarPerBin)
+                    systInteg += np.sum(maxVarPerBin)
 
-        totalSystInBins = np.sqrt(sum( binSysts**2 for binSysts in systPerBin.itervalues() ))
+        totalSystInBins = np.sqrt(sum( binSysts**2 for binSysts in itervalues(systPerBin) ))
+        if len(systPerBin) == 0: ## no-syst case
+            totalSystInBins = np.zeros((nBins,))
 
         return systInteg, totalSystInBins
 
@@ -110,10 +131,6 @@ class THistogramStack(collections.Sequence):
         return h1u.histoDivByValues(self.getSystematicHisto(systVarNames))
 
 
-
-
-import mplbplot.plot ## axes decorators for TH1F
-
 class THistogramRatioPlot(object):
     """
     Helper class for the common use case of a pad with two histogram stacks (MC and data or, more generally, expected and observed) and their ratio in a smaller pad below
@@ -122,6 +139,7 @@ class THistogramRatioPlot(object):
         ## TODO put placement in some kind of helper method (e.g. a staticmethod that takes the fig)
         import matplotlib.pyplot as plt
         import matplotlib.ticker
+        import mplbplot.decorateAxes ## axes decorators for TH1F
         from mplbplot.plothelpers import formatAxes, minorTicksOn
 
         self.fig, axes = plt.subplots(2, 1, sharex=True, gridspec_kw={"height_ratios":(4,1)}, figsize=(7.875, 7.63875)) ## ...
@@ -152,7 +170,7 @@ class THistogramRatioPlot(object):
             ax = self.ax
 
         ## expected
-        exp_hists, exp_colors = izip(*((eh.hist.obj, eh.drawOpts.get("fill_color", "white")) for eh in self.expected.entries))
+        exp_hists, exp_colors = zip(*((eh.hist.obj, eh.drawOpts.get("fill_color", "white")) for eh in self.expected.entries))
         ax.rhist(exp_hists, histtype="stepfilled", color=exp_colors, stacked=True)
         exp_statsyst = self.expected.getStatSystHisto()
         ax.rerrorbar(exp_statsyst, kind="box", hatch=8*"/", ec="none", fc="none")

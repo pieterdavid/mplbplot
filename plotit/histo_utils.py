@@ -5,7 +5,8 @@ __all__ = ("cloneHist", "addOverflow",
            "histoWithErrors", "histoWithErrorsQuadAdded", "histoDivByValues",
            "divide")
 
-from itertools import izip, count, chain
+from builtins import zip
+from itertools import count, chain
 import numpy as np
 
 from cppyy import gbl
@@ -45,14 +46,14 @@ def addOverflow(hist, edgeBin, isLower):
 def histoWithErrors(hist, newErrors):
     """ make a histogram with bin errors set to the given values """
     newHist = cloneHist(hist)
-    for i,ierr in izip(count(1), newErrors):
+    for i,ierr in zip(count(1), newErrors):
         newHist.SetBinError(i, ierr)
     return newHist
 
 def histoWithErrorsQuadAdded(hist, newErrors):
     """ make a histogram with given values added in quadrature to the existing bin errors """
     newHist = cloneHist(hist)
-    for i,ierr in izip(count(1), newErrors):
+    for i,ierr in zip(count(1), newErrors):
         newHist.SetBinError(i, np.sqrt(hist.GetBinError(i)**2 + ierr**2))
     return newHist
 
@@ -60,7 +61,7 @@ def histoDivByValues(absHisto):
     """ make a histogram with values 1 and errors err/val """
     relHisto = cloneHist(absHisto)
     from mplbplot.decorators import bins
-    for i,b in izip(count(1), bins(absHisto)):
+    for i,b in zip(count(1), bins(absHisto)):
         relHisto.SetBinContent(i, 1.)
         if b.content != 0.:
             relHisto.SetBinError(i, b.error/b.content)
@@ -83,5 +84,5 @@ def divide(num, denom):
                       , np.sqrt( (nb.lowError**2*db.content**2 + db.lowError*nb.content**2) ) / db.content**2
                       , np.sqrt( (nb.upError**2 *db.content**2 + db.upError *nb.content**2) ) / db.content**2
                       ] if db.content != 0. else [ nb.xCenter, 1., 1., 1. ] )
-                      for nb, db in izip(bins(num), bins(denom)) ])
+                      for nb, db in zip(bins(num), bins(denom)) ])
     return vals[:,0], vals[:,1], vals[:,2:].T

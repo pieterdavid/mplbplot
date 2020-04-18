@@ -1,3 +1,4 @@
+from __future__ import absolute_import
 """
 plotIt using matplotlib
 
@@ -6,6 +7,7 @@ Based on https://github.com/cp3-llbb/plotIt
 WARNING: very much work-in-progress, many things are not implemented yet
 """
 
+from future.utils import iteritems
 from itertools import chain
 from collections import OrderedDict as odict
 
@@ -18,16 +20,16 @@ class BaseYAMLObject(object):
         return att.replace("-", "_")
     @staticmethod
     def _normalizeKeys(aDict):
-        return dict((BaseYAMLObject._normalizeAttr(k), v) for k, v in aDict.iteritems())
+        return dict((BaseYAMLObject._normalizeAttr(k), v) for k, v in iteritems(aDict))
     def __init__(self, **kwargs):
         if not all( nm in kwargs for nm in self.__class__.required_attributes ):
             raise KeyError("Attribute(s) {1} required for class {0} but not found (full dictionary: {2})".format(self.__class__.__name__, ", ".join("'{}'".format(k) for k in self.__class__.required_attributes if k not in kwargs), str(kwargs)))
-        if not all( k in self.__class__.required_attributes or k in self.__class__.optional_attributes for k in kwargs.iterkeys() ):
-            raise KeyError("Unknown attribute(s) for class {0}: {1} (all attributes: {2})".format(self.__class__.__name__, ", ".join("'{}'".format(k) for k in kwargs.iterkeys() if k not in self.__class__.required_attributes and k not in self.__class__.optional_attributes), str(kwargs)))
+        if not all( k in self.__class__.required_attributes or k in self.__class__.optional_attributes for k in kwargs ):
+            raise KeyError("Unknown attribute(s) for class {0}: {1} (all attributes: {2})".format(self.__class__.__name__, ", ".join("'{}'".format(k) for k in kwargs if k not in self.__class__.required_attributes and k not in self.__class__.optional_attributes), str(kwargs)))
         self.__dict__.update(BaseYAMLObject._normalizeKeys(self.__class__.optional_attributes))
         self.__dict__.update(BaseYAMLObject._normalizeKeys(kwargs))
     def __repr__(self):
-        return "{0}({1})".format(self.__class__.__name__, ", ".join("{0}={1!r}".format(k,getattr(self, BaseYAMLObject._normalizeAttr(k))) for k in chain(self.__class__.required_attributes, (dk for dk,dv in self.__class__.optional_attributes.iteritems() if dv is not getattr(self, BaseYAMLObject._normalizeAttr(dk))))))
+        return "{0}({1})".format(self.__class__.__name__, ", ".join("{0}={1!r}".format(k,getattr(self, BaseYAMLObject._normalizeAttr(k))) for k in chain(self.__class__.required_attributes, (dk for dk,dv in iteritems(self.__class__.optional_attributes) if dv is not getattr(self, BaseYAMLObject._normalizeAttr(dk))))))
 
 def mergeDicts(first, second):
     """ trivial helper: copy first, update with second and return """
@@ -85,7 +87,7 @@ class PlotStyle(BaseYAMLObject):
         return (r,g,b,a)
 
 
-from systematics import HistoKey
+from .systematics import HistoKey
 
 class HistoFile(PlotStyle):
     required_attributes = set(("path", "type"))
@@ -104,6 +106,7 @@ class HistoFile(PlotStyle):
             , "legend-group"     : None
             ##
             , "order"            : None
+            , "era"              : None
             })
     def __init__(self, **kwargs):
         super(HistoFile, self).__init__(**kwargs)
@@ -121,6 +124,18 @@ class HistoFile(PlotStyle):
         self._tf = gbl.TFile.Open(self.path)
     def getKey(self, name, **kwargs):
         return HistoKey(self._tf, name, **kwargs)
+
+class Point(BaseYAMLObject):
+    required_attributes = set(("x", "y"))
+    def __init__(self, **kwargs):
+        super(Point, self).__init__(**kwargs)
+
+class Label(BaseYAMLObject):
+    required_attributes = set(("text", "position"))
+    optional_attributes = { "size" : 18 }
+    def __init__(self, **kwargs):
+        super(Label, self).__init__(**kwargs)
+        self.position = Point(self.position)
 
 class Plot(BaseYAMLObject):
     required_attributes = set(("name",))
@@ -159,8 +174,8 @@ class Plot(BaseYAMLObject):
             , "y-axis-show-zero"          : None
             , "inherits-from"             : None
             , "rebin"                     : 1
-            , "labels"                    : None
-            , "extra-labels"              : None
+            , "labels"                    : []
+            , "extra-label"               : None
             , "legend-position"           : None
             , "legend-columns"            : None
             , "show-overflow"             : None
@@ -190,6 +205,7 @@ class Plot(BaseYAMLObject):
         #    except Exception, e:
         #        raise ValueError("Could not parse x-axis-range {0}: {1}".format(self.x_axis_range, e))
         #    self.x_axis_range = lims
+        self.labels = [ Label(lblNd) for lblNd in self.labels ]
 
 def _plotit_loadWrapper(fpath):
     """ yaml.safe_load from path """
@@ -202,13 +218,12 @@ import os.path
 
 def _load_includes(cfgDict, basePath):
     updDict = dict()
-    for k,v in cfgDict.iteritems():
+    for k,v in iteritems(cfgDict):
         if isinstance(v, dict):
-            if len(v) == 1 and next(v.iterkeys()) == "include":
-                vals = v[next(v.iterkeys())]
+            if len(v) == 1 and next(k for k in v) == "include":
+                vals = v[next(k for k in v)]
                 newDict = dict()
-                for iv in vals:
-                    iPath = vals[0]
+                for iPath in vals:
                     if not os.path.isabs(iPath):
                         iPath = os.path.join(basePath, iPath)
                     if not os.path.exists(iPath):
@@ -221,12 +236,12 @@ def _load_includes(cfgDict, basePath):
     cfgDict.update(updDict)
 
 def makeSystematic(item):
-    from systematics import ShapeSystVar, ConstantSystVar, LogNormalSystVar
+    from .systematics import ShapeSystVar, ConstantSystVar, LogNormalSystVar
     if isinstance(item, str):
         return ShapeSystVar(item)
     elif isinstance(item, dict):
         if len(item) == 1:
-            name, val = next(item.iteritems())
+            name, val = next(iteritems(item))
             if isinstance(val, float):
                 return ConstantSystVar(name, val)
             elif isinstance(val, dict):
@@ -235,7 +250,7 @@ def makeSystematic(item):
                 elif val["type"] == "const":
                     syst = ConstantSystVar(name, val["value"])
                 elif val["type"] in ("lognormal", "ln"):
-                    cfg = dict((k.replace("-", "_"), v) for k, v in val.iteritems())
+                    cfg = dict((k.replace("-", "_"), v) for k, v in iteritems(val))
                     cfg.pop("type")
                     prior = cfg.pop("prior")
                     syst = LogNormalSystVar(name, prior, **cfg)
@@ -257,16 +272,16 @@ def _plotIt_histoPath(histoPath, cfgRoot, baseDir):
     else:
         return os.path.join(baseDir, cfgRoot, histoPath)
 
-def plotIt_load(mainPath, histoBaseDir):
+def plotIt_load(mainPath, histoBaseDir, vetoFileAttributes=tuple()):
     ## load config, with includes
     cfg = _plotit_loadWrapper(mainPath)
     basedir = os.path.dirname(mainPath)
     _load_includes(cfg, basedir)
-    plotDefaults = dict((k,v) for k,v in cfg["configuration"].iteritems() if k in ("y-axis-format", "show-overflow", "errors-type"))
+    plotDefaults = dict((k,v) for k,v in iteritems(cfg["configuration"]) if k in ("y-axis-format", "show-overflow", "errors-type"))
     ## construct objects
-    files = odict(sorted(dict((k, HistoFile(path=_plotIt_histoPath(k, cfg["configuration"]["root"], histoBaseDir), **v)) for k, v in cfg["files"].iteritems()).iteritems(), key=lambda (k,v) : v.order))
+    files = odict(sorted(iteritems(dict((k, HistoFile(path=_plotIt_histoPath(k, cfg["configuration"]["root"], histoBaseDir), **v)) for k, v in iteritems(cfg["files"]))), key=lambda (k,v) : v.order))
     ## TODO groups
-    plots = dict((k, Plot(name=k, **mergeDicts(plotDefaults, v))) for k, v in cfg.get("plots", {}).iteritems())
+    plots = dict((k, Plot(name=k, **mergeDicts(plotDefaults, v))) for k, v in iteritem(cfg.get("plots", {})))
     systematics = [ makeSystematic(item) for item in cfg.get("systematics", []) ]
 
     return cfg, files, plots, systematics
@@ -276,11 +291,35 @@ def getScaleForFile(f, config):
     if f.type == "data":
         return 1.
     else:
-        mcScale = ( config["luminosity"]*f.cross_section*f.branching_ratio / f.generated_events )
+        mcScale = ( config["eras"][f.era]["luminosity"]*f.cross_section*f.branching_ratio / f.generated_events )
         if config.get("ignore-scales", False):
             return mcScale
         else:
             return mcScale*config.get("scale", 1.)*f.scale
+
+def drawPlot(plot, expStack, obsStack, outdir="."):
+    from .histstacksandratioplot import THistogramRatioPlot
+    theplot = THistogramRatioPlot(expected=expStack, observed=obsStack) ## TODO more opts?
+    theplot.draw()
+    #
+    if plot.x_axis_range:
+        theplot.ax.set_xlim(*plot.x_axis_range)
+    if plot.x_axis:
+        theplot.rax.set_xlabel(plot.x_axis)
+    #
+    if plot.y_axis_range:
+        theplot.ax.set_ylim(*plot.y_axis_range)
+    else:
+        if not plot.log_y:
+            theplot.ax.set_ylim(0.)
+    if plot.y_axis:
+        theplot.ax.set_ylabel(plot.y_axis)
+    elif plot.y_axis_format:
+        pass
+    #
+    import os.path
+    for ext in plot.save_extensions:
+        theplot.fig.savefig(os.path.join(outdir, "{0}.{1}".format(plot.name, ext)))
 
 def plotIt(plots, files, systematics=None, config=None):
     ## default kwargs
@@ -291,39 +330,21 @@ def plotIt(plots, files, systematics=None, config=None):
 
     scaleAndSystematicsPerFile = odict((f,
         (getScaleForFile(f, config), dict((syst.name, syst) for syst in systematics if syst.on(fN, f)))
-        ) for fN,f in files.iteritems())
+        ) for fN,f in iteritems(files))
 
-    from histstacksandratioplot import THistogramStack, THistogramRatioPlot
-    from systematics import SystVarsForHist
-    for pName, aPlot in plots.iteritems():
+    from .histstacksandratioplot import THistogramStack
+    from .systematics import SystVarsForHist
+    for pName, aPlot in iteritems(plots):
         obsStack = THistogramStack()
         expStack = THistogramStack()
-        for f, (fScale, fSysts) in scaleAndSystematicsPerFile.iteritems():
+        for f, (fScale, fSysts) in iteritems(scaleAndSystematicsPerFile):
             hk = f.getKey(pName, scale=fScale, rebin=aPlot.rebin, xOverflowRange=(aPlot.x_axis_range if aPlot.show_overflow else None))
             if f.type == "data":
                 obsStack.add(hk, systVars=SystVarsForHist(hk, fSysts)) ##, label=..., drawOpts=...
             elif f.type == "mc":
                 expStack.add(hk, systVars=SystVarsForHist(hk, fSysts), drawOpts={"fill_color":f.fill_color}) ##, label=..., drawOpts=...
-        theplot = THistogramRatioPlot(expected=expStack, observed=obsStack) ## TODO more opts?
-        theplot.draw()
-        #
-        if aPlot.x_axis_range:
-            theplot.ax.set_xlim(*aPlot.x_axis_range)
-        if aPlot.x_axis:
-            theplot.rax.set_xlabel(aPlot.x_axis)
-        #
-        if aPlot.y_axis_range:
-            theplot.ax.set_ylim(*aPlot.y_axis_range)
-        else:
-            if not aPlot.log_y:
-                theplot.ax.set_ylim(0.)
-        if aPlot.y_axis:
-            theplot.ax.set_ylabel(aPlot.y_axis)
-        elif aPlot.y_axis_format:
-            pass
-        #
-        for ext in aPlot.save_extensions:
-            theplot.fig.savefig("{0}.{1}".format(pName, ext))
+
+        drawPlot(aPlot, expStack, obsStack)
 
 
 def plotItFromYAML(yamlFileName, histoBaseDir):
