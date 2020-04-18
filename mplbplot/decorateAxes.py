@@ -1,3 +1,4 @@
+from __future__ import absolute_import
 """
 Decorate matplotlib.axes.Axes with draw methods for ROOT objects
 
@@ -27,9 +28,9 @@ Available methods:
 """
 __all__ = ()
 
-import draw_th1    ## add rhist and implementations for rplot, rerrorbar and rtext
-import draw_tgraph ## add implementations for rplot and rerrorbar
-import draw_th2    ## add rcontour, rcontourf, rpcolor and implementation for rtext
+from . import draw_th1    ## add rhist and implementations for rplot, rerrorbar and rtext
+from . import draw_tgraph ## add implementations for rplot and rerrorbar
+from . import draw_th2    ## add rcontour, rcontourf, rpcolor and implementation for rtext
 for imod in (draw_th1, draw_tgraph, draw_th2):
     imod._addDecorations()
 

@@ -18,7 +18,7 @@ with open(path.join(here, "README.rst"), encoding="utf-8") as f:
 setup(
     name="mplbplot",
 
-    version="0.1.0",
+    version="0.2.0",
 
     description="Simple drawing of ROOT objects with matplotlib",
     long_description=long_description,
@@ -31,7 +31,7 @@ setup(
     license='MIT',
 
     classifiers=[
-        'Development Status :: 3 - Alpha',
+        'Development Status :: 4 - Beta',
 
         'Intended Audience :: Developers',
         'Intended Audience :: Science/Research',
@@ -42,13 +42,15 @@ setup(
 
         'Programming Language :: Python :: 2',
         'Programming Language :: Python :: 2.7',
+        'Programming Language :: Python :: 3',
+        'Programming Language :: Python :: 3.7',
     ],
 
     keywords='ROOT matplotlib',
 
     packages=["mplbplot"],
 
-    install_requires=['matplotlib'],
+    install_requires=["future", "matplotlib"],
 
     extras_require={},
 

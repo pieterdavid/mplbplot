@@ -22,6 +22,8 @@ def points(graph):
     return graph.__points__()
 
 from itertools import product
+from future.utils import iteritems
+from builtins import range
 
 from cppyy import gbl
 
@@ -127,7 +129,7 @@ class AxisBins1D(object):
         return "AxisBins1D({0})".format(repr(self._a))
 
     def __iter__(self):
-        for i in xrange(1,self._a.GetNbins()+1):
+        for i in range(1,self._a.GetNbins()+1):
             yield AxisBin1D(self._a, i)
 
     def __len__(self):
@@ -158,7 +160,7 @@ class HistoBin1D(object):
         return "{0}({1})[{2:n}]".format(self.__class__.__name__, repr(self._h), self._i)
 
 # HistoBin1D data descriptors
-for name, getter in histBinDescriptors.iteritems():
+for name, getter in iteritems(histBinDescriptors):
     prop = BinProperty1(getter, "_i")
     prop.__doc__ = "Bin {n} using ROOT.TH1.{func}".format(n=name, func=getter.__name__)
     setattr(HistoBin1D, name, prop)
@@ -169,7 +171,7 @@ for name, getter in histBinDescriptors.iteritems():
     hProp.__doc__ = "Bin {n} height using {func}".format(n=name, func=hGetterName)
     setattr(HistoBin1D, "{0}H".format(name), hProp)
 # Delegates to X-axis
-for name, getter in axisBinDescriptors.iteritems():
+for name, getter in iteritems(axisBinDescriptors):
     xGetter = lambda h,i,getter=getter : getter(h.GetXaxis(), i)
     xGetterName = "lambda h,i : ROOT.TAxis.{0}(h.GetXaxis(), i)".format(getter.__name__)
     prop = BinProperty1(xGetter, "_i")
@@ -192,7 +194,7 @@ class HistoBins1D(object):
         return "HistoBins1D({0})".format(repr(self._h))
 
     def __iter__(self):
-        for i in xrange(1,self._h.GetNbinsX()+1):
+        for i in range(1,self._h.GetNbinsX()+1):
             yield HistoBin1D(self._h, i)
 
     def __len__(self):
@@ -226,7 +228,7 @@ class HistoBin2D(object):
         return "{0}({1})[{2:n},{3:n}]".format(self.__class__.__name__, repr(self._h), self._i, self._j)
 
 # HistoBin2D data descriptors
-for name, getter in histBinDescriptors.iteritems():
+for name, getter in iteritems(histBinDescriptors):
     prop = BinProperty2(getter, "_i", "_j")
     prop.__doc__ = "Bin {n} using ROOT.TH2.{func}".format(n=name, func=getter.__name__)
     setattr(HistoBin2D, name, prop)
@@ -237,7 +239,7 @@ for name, getter in histBinDescriptors.iteritems():
     hProp.__doc__ = "Bin {n} height using {func}".format(n=name, func=hGetterName)
     setattr(HistoBin2D, "{0}H".format(name), hProp)
 # Delegates to axes
-for name, getter in axisBinDescriptors.iteritems():
+for name, getter in iteritems(axisBinDescriptors):
     # X axis
     xGetter = lambda h,i,getter=getter : getter(h.GetXaxis(), i)
     xGetterName = "lambda h,i : ROOT.TAxis.{0}(h.GetXaxis(), i)".format(getter.__name__)
@@ -267,12 +269,13 @@ class HistoBins2D(object):
         return "HistoBins2D({0})".format(repr(self._h))
 
     def __iter__(self):
-        for i, j in product(xrange(1,self._h.GetNbinsX()+1), xrange(1,self._h.GetNbinsY()+1)):
+        for i, j in product(range(1,self._h.GetNbinsX()+1), range(1,self._h.GetNbinsY()+1)):
             yield HistoBin2D(self._h, i, j)
 
     def __len__(self):
         return self._h.GetNbinsX()*self._h.GetNbinsY()
-    def __getitem__(self, (i, j) ):
+    def __getitem__(self, idx):
+        i, j = idx
         return HistoBin2D(self._h, i, j)
 
 def _th2_bins(self):
@@ -297,7 +300,7 @@ class GraphPoint(object):
         return "GraphPoints({0})[{1:n}]".format(repr(self._h), self._i)
 
 for ax in ("x", "y"):
-    for namePat, getterGen in graphPointDescriptorsPerAxis.iteritems():
+    for namePat, getterGen in iteritems(graphPointDescriptorsPerAxis):
         name = namePat.format(ax)
         getter = getterGen(ax)
         prop = BinProperty1(getter, "_i")
@@ -317,7 +320,7 @@ class GraphPoints(object):
         return "GraphPoints({0})".format(repr(self._g))
 
     def __iter__(self):
-        for i in xrange(self._g.GetN()):
+        for i in range(self._g.GetN()):
             yield GraphPoint(self._g, i)
 
     def __len__(self):

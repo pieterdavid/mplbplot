@@ -10,12 +10,12 @@ TH1.__plot__, TH1.__errorbar__, and TH1.__text__.
 """
 __all__ = ("hist", "plot", "errorbar", "text", "IncompatibleAxesError")
 
-from itertools import izip_longest
+from future.moves.itertools import zip_longest
 
 from .decorators import bins
 
 def _equal_lists(a,b):
-    return all( ia == ib for ia,ib in izip_longest(a,b) )
+    return all( ia == ib for ia,ib in zip_longest(a,b) )
 
 def xBinEdges(h):
     return [ bins(h)[1].xLowEdge ] + [ b.xUpEdge for b in bins(h) ]

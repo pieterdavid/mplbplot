@@ -19,7 +19,7 @@ __all__ = ( "histHandlerMap"
 import copy
 import numpy as np
 
-from itertools import ifilter, imap
+from builtins import map, filter
 
 import matplotlib.cbook
 import matplotlib.colors
@@ -42,8 +42,8 @@ class HandlerPolygonAsPathIfEmpty(matplotlib.legend_handler.HandlerPatch):
         if not orig_handle.fill: # using path instead
             xy = orig_handle.get_xy()
             origProps = orig_handle.properties()
-            props = dict(imap( lambda (k,v) : (k,v) if not k.startswith("edge") else (k[4:], v),
-                            ifilter( lambda (k,v) : k.startswith("line") or k.startswith("edge") or k in ("label",),
+            props = dict(map( lambda itm : itm if not itm[0].startswith("edge") else (itm[0][4:], itm[1]),
+                            filter( lambda itm : itm[0].startswith("line") or itm[0].startswith("edge") or itm[0] in ("label",),
                                 origProps.iteritems())))
             ln = matplotlib.lines.Line2D(xy[:,0], xy[:,1], marker=None, **props)
             handler = legend.get_legend_handler(legend.get_legend_handler_map(), ln)
