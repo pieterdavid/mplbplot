@@ -48,7 +48,7 @@ setup(
 
     keywords='ROOT matplotlib',
 
-    packages=["mplbplot"],
+    packages=["mplbplot", "plotit"],
 
     install_requires=["future", "matplotlib"],
 
