@@ -5,7 +5,7 @@ __all__ = ("cloneHist", "addOverflow",
            "histoWithErrors", "histoWithErrorsQuadAdded", "histoDivByValues",
            "divide")
 
-from builtins import zip
+from builtins import zip, range
 from itertools import count, chain
 import numpy as np
 
@@ -30,9 +30,9 @@ def sumW2BinRange(hist, binRange):
 def addOverflow(hist, edgeBin, isLower):
     """ Add contents of bins outside range (below or above edgeBin, depending on isLower) to edgeBin """
     if isLower:
-        rng_out = xrange(0, edgeBin)
+        rng_out = range(0, edgeBin)
     else:
-        rng_out = xrange(edgeBin+1, hist.GetNbinsX()+2)
+        rng_out = range(edgeBin+1, hist.GetNbinsX()+2)
     rng_inc = chain((edgeBin,), iter(rng_out))
     hasSumw2 = ( hist.GetSumw2N() != 0 )
     hist.SetBinContent(edgeBin, sumBinRange(hist, iter(rng_inc)))

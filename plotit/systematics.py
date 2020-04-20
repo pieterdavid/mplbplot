@@ -69,7 +69,7 @@ class HistoKey(object):
             res = h1u.cloneHist(res)
             if self.xOverflowRange is not None:
                 res.GetXaxis().SetRangeUser(self.xOverflowRange[0], self.xOverflowRange[1])
-                from histo_utils import addOverflow
+                from .histo_utils import addOverflow
                 addOverflow(res, res.GetXaxis().GetFirst(), True )
                 addOverflow(res, res.GetXaxis().GetLast() , False)
             if self.scale != 1.:
