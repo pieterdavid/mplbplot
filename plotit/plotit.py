@@ -279,9 +279,9 @@ def plotIt_load(mainPath, histoBaseDir, vetoFileAttributes=tuple()):
     _load_includes(cfg, basedir)
     plotDefaults = dict((k,v) for k,v in iteritems(cfg["configuration"]) if k in ("y-axis-format", "show-overflow", "errors-type"))
     ## construct objects
-    files = odict(sorted(iteritems(dict((k, HistoFile(path=_plotIt_histoPath(k, cfg["configuration"]["root"], histoBaseDir), **v)) for k, v in iteritems(cfg["files"]))), key=lambda (k,v) : v.order))
+    files = odict(sorted(iteritems(dict((k, HistoFile(path=_plotIt_histoPath(k, cfg["configuration"]["root"], histoBaseDir), **dict((ak,av) for ak,av in v.items() if ak not in vetoFileAttributes))) for k, v in iteritems(cfg["files"]))), key=lambda itm : itm[1].order if itm[1].order is not None else 0))
     ## TODO groups
-    plots = dict((k, Plot(name=k, **mergeDicts(plotDefaults, v))) for k, v in iteritem(cfg.get("plots", {})))
+    plots = dict((k, Plot(name=k, **mergeDicts(plotDefaults, v))) for k, v in iteritems(cfg.get("plots", {})))
     systematics = [ makeSystematic(item) for item in cfg.get("systematics", []) ]
 
     return cfg, files, plots, systematics

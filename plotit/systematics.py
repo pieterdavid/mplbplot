@@ -9,6 +9,13 @@ __all__ = ("HistoKey", "SystVarsForHist",
 import itertools
 from . import histo_utils as h1u
 
+class MemHistoKey(object):
+    """ mini-version for in-memory histograms """
+    def __init__(self, obj):
+        self.obj = obj
+    def __getattr__(self, name):
+        return getattr(self.obj, name)
+
 class HistoKey(object):
     """
     TH1F wrapper to keep track of origin file, name and transformation
