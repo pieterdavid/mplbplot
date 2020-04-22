@@ -1,8 +1,13 @@
 import pytest
 import yaml
-import os.path
+import os, os.path
 import plotit_configuration
 import image_utils
+
+## Use Agg backend on travis
+import matplotlib as mpl
+if os.environ.get('DISPLAY','') == '':
+    mpl.use('Agg')
 
 testPlotItDir = os.path.abspath(os.path.join(os.path.dirname(__file__), "plotit"))
 
