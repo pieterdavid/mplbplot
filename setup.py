@@ -50,7 +50,7 @@ setup(
 
     packages=["mplbplot", "plotit"],
 
-    install_requires=["future", "matplotlib"],
+    install_requires=["future", "matplotlib", "PyYAML"],
 
     extras_require={},
 

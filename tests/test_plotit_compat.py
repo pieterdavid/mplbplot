@@ -10,7 +10,7 @@ default_threshold = .995
 
 @pytest.fixture(scope="session")
 def plotit_test_inputs(tmpdir_factory):
-    workdir = tmpdir_factory.mktemp("plotIt")
+    workdir = str(tmpdir_factory.mktemp("plotIt"))
     import shutil
     shutil.copytree(os.path.join(testPlotItDir, "files"), os.path.join(workdir, "files"))
     macroPath = os.path.join(testPlotItDir, "generate_files.C")

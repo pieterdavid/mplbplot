@@ -135,8 +135,11 @@ class SystVar(object):
             """ Down variation for bin i """
             pass
 
-import collections.abc
-class SystVarsForHist(collections.abc.Mapping):
+try: ## python3 (avoid warning)
+    from collections.abc import Mapping
+except ImportError: ## python2
+    from collections import Mapping
+class SystVarsForHist(Mapping):
     """ dict-like object to assign as systVars to an entry
 
     (parent is the actual dictionary with SystVars) """
