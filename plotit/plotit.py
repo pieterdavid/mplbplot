@@ -6,7 +6,7 @@ Based on https://github.com/cp3-llbb/plotIt
 
 WARNING: very much work-in-progress, many things are not implemented yet
 """
-
+from . import logger
 from future.utils import iteritems, itervalues
 from itertools import chain
 from collections import OrderedDict as odict
@@ -268,7 +268,7 @@ def makeSystematic(item):
                 if True in val:
                     import re
                     pat = re.compile(val[True])
-                    syst.on = ( lambda aPat : ( lambda fName,fObj : bool(aPat.match(fName)) ) )(pat) ## FIXME on is automatically parsed to True
+                    syst.on = ( lambda aPat : ( lambda fName,fObj : bool(aPat.match(fName)) ) )(pat) ## FIXME on is automatically parsed to True, isMC and ...
                 return syst
     else:
         raise ValueError("Invalid systematics node, must be either a string or a map")
@@ -286,12 +286,13 @@ def plotIt_load(mainPath, histodir=".", vetoFileAttributes=tuple()):
     cfg = _plotit_loadWrapper(mainPath)
     basedir = os.path.dirname(mainPath)
     _load_includes(cfg, basedir)
-    plotDefaults = dict((k,v) for k,v in iteritems(cfg["configuration"]) if k in ("y-axis-format", "show-overflow", "errors-type"))
+    configuration = cfg["configuration"]
+    plotDefaults = dict((k,v) for k,v in iteritems(configuration) if k in ("y-axis-format", "show-overflow", "errors-type"))
     ## files and groups
     files = dict()
     for name, fileCfg in iteritems(cfg["files"]):
         attrs = dict((ak,av) for ak,av in iteritems(fileCfg) if ak not in vetoFileAttributes)
-        files[name] = HistoFile(path=_plotIt_histoPath(name, cfg["configuration"]["root"], histodir), **attrs)
+        files[name] = HistoFile(path=_plotIt_histoPath(name, configuration["root"], histodir), **attrs)
     groups = dict()
     for name, groupCfg in iteritems(cfg.get("groups", dict())):
         groupFiles = dict((fName, f) for fName, f in iteritems(files) if f.group == name)
@@ -302,8 +303,15 @@ def plotIt_load(mainPath, histodir=".", vetoFileAttributes=tuple()):
     ## plots and systematics
     plots = dict((k, Plot(name=k, **mergeDicts(plotDefaults, v))) for k, v in iteritems(cfg.get("plots", {})))
     systematics = [ makeSystematic(item) for item in cfg.get("systematics", []) ]
+    ## lumi systematic
+    lumi_err = configuration.get("luminosity-error", 0.)
+    if lumi_err != 0.:
+        from .systematics import ConstantSystVar
+        lumisyst = ConstantSystVar("lumi", 1.+lumi_err, pretty_name="Luminosity")
+        logger.debug("Adding luminosity systematic {0!r} {1} {2}".format(lumisyst, str(lumisyst.value), lumisyst._repr_args()))
+        systematics.append(lumisyst)
 
-    return cfg, files, groups, plots, systematics
+    return configuration, files, groups, plots, systematics
 
 def getScaleForFile(f, config):
     """ Infer the scale factor for histograms from the file dict and the overall config """
@@ -359,8 +367,8 @@ def plotIt(plots, files, groups=None, systematics=None, config=None, outdir=".")
         return 0
 
     scaleAndSystematicsPerFile = odict((f,
-        (getScaleForFile(f, config), dict((syst.name, syst) for syst in systematics if syst.on(fN, f)))
-        ) for fN,f in sorted(iteritems(files), key=lambda itm : getOrder(itm[1], groups=groups)))
+        (getScaleForFile(f, config), dict((syst.name, syst) for syst in systematics if f.type != "data" and syst.on(fN, f)))
+        ) for fN,f in sorted(iteritems(files), key=lambda itm : getOrder(itm[1], groups=groups), reverse=True))
 
     from .histstacksandratioplot import THistogramStack
     from .systematics import SystVarsForHist
@@ -368,9 +376,10 @@ def plotIt(plots, files, groups=None, systematics=None, config=None, outdir=".")
         obsStack = THistogramStack()
         expStack = THistogramStack()
         for f, (fScale, fSysts) in iteritems(scaleAndSystematicsPerFile):
+            logger.debug("Scale and systematics for file {0}: {1:f} {2!s}".format(f.pretty_name, fScale, fSysts))
             hk = f.getKey(pName, scale=fScale, rebin=aPlot.rebin, xOverflowRange=(aPlot.x_axis_range if aPlot.show_overflow else None))
             if f.type == "data":
-                obsStack.add(hk, systVars=SystVarsForHist(hk, fSysts)) ##, label=..., drawOpts=...
+                obsStack.add(hk) ##, label=..., drawOpts=...
             elif f.type == "mc":
                 expStack.add(hk, systVars=SystVarsForHist(hk, fSysts), drawOpts={"fill_color":f.fill_color}) ##, label=..., drawOpts=...
 
@@ -378,10 +387,11 @@ def plotIt(plots, files, groups=None, systematics=None, config=None, outdir=".")
 
 
 def plotItFromYAML(yamlFileName, histodir=".", outdir="."):
-    cfg, files, groups, plots, systematics = plotIt_load(yamlFileName, histodir=histodir)
+    logger.info("Running like plotIt with config {0}, histodir={1}, outdir={1}".format(yamlFileName, histodir, outdir))
+    config, files, groups, plots, systematics = plotIt_load(yamlFileName, histodir=histodir)
     ### get list of files, get list of systs, dict of systs per file; then list of plots: for each plot build the stacks and draw
     ## TODO cfg -> config
-    plotIt(plots, files, groups=groups, systematics=systematics, config=cfg["configuration"], outdir=outdir)
+    plotIt(plots, files, groups=groups, systematics=systematics, config=config, outdir=outdir)
 
 if __name__ == "__main__": ## quick test of basic functionality
     import ROOT

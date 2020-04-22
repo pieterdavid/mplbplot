@@ -9,11 +9,10 @@ import numpy as np
 from builtins import zip, range
 from future.utils import iteritems, itervalues
 from itertools import chain
-import collections
 
 from . import histo_utils as h1u
 
-class THistogramStack(collections.Sequence):
+class THistogramStack(object):
     """
     Python equivalent of THStack
 
@@ -30,36 +29,24 @@ class THistogramStack(collections.Sequence):
             self.drawOpts = drawOpts if drawOpts else dict()
 
     def __init__(self):
-        self._entries = []
-        self._stack = None ## sum histograms (lazy, constructed when accessed and cached)
+        self.entries = [] # list of histograms (entries) used to build the stack
+        self._total = None ## sum histograms (lazy, constructed when accessed and cached)
 
     def add(self, hist, **kwargs):
         """ Main method: add a histogram on top of the stack """
-        self._entries.append(THistogramStack.Entry(hist, **kwargs))
+        if self._total:
+            raise RuntimeError("Stack has been built, no more entries should be added")
+        self.entries.append(THistogramStack.Entry(hist, **kwargs))
 
     @property
-    def entries(self):
-        """ list of histograms (entries) used to build the stack"""
-        return self._entries
-    @property
-    def stacked(self):
-        """ list of "stack" histograms (per-bin cumulative sums) """
-        if not ( self._stack is not None and len(self._stack) == len(self._entries) ):
-            self._buildStack()
-        return self._stack
-    @property
-    def stackTotal(self):
+    def total(self):
         """ upper stack histogram """
-        return self.stacked[-1]
-    def _buildStack(self):
-        self._stack = []
-        if len(self._entries) > 0:
-            h = h1u.cloneHist(self._entries[0].hist.obj)
-            self._stack.append(h)
-            for nh in self._entries[1:]:
-                h = h1u.cloneHist(h)
-                h.Add(nh.hist.obj)
-                self._stack.append(h)
+        if ( not self._total ) and self.entries:
+            hSt = h1u.cloneHist(self.entries[0].hist.obj)
+            for nh in self.entries[1:]:
+                hSt.Add(nh.hist.obj)
+            self._total = hSt
+        return self._total
 
     @staticmethod
     def merge(*stacks):
@@ -76,25 +63,19 @@ class THistogramStack(collections.Sequence):
                 mergedSt.add(MemHistoKey(newHist), label=entry.label, systVars=entry.systVars, drawOpts=entry.drawOpts)
             return mergedSt
 
-    ## sequence methods -> stacked list
-    def __getitem__(self, i):
-        return self.stacked[i]
-    def __len__(self):
-        return len(self._entries)
-
     def _defaultSystVarNames(self):
         """ Get the combined (total rate and per-bin) systematics
 
         systVarNames: systematic variations to consider (if None, all that are present are used for each histogram)
         """
-        return set(chain.from_iterable(contrib.systVars for contrib in self._entries))
+        return set(chain.from_iterable(contrib.systVars for contrib in self.entries))
 
     def getTotalSystematics(self, systVarNames=None):
         """ Get the combined systematics
 
         systVarNames: systematic variations to consider (if None, all that are present are used for each histogram)
         """
-        nBins = self.stackTotal.GetNbinsX()
+        nBins = self.total.GetNbinsX()
         binRange = range(1,nBins+1) ## no overflow or underflow
 
         if systVarNames is None:
@@ -103,14 +84,11 @@ class THistogramStack(collections.Sequence):
         systPerBin = dict((vn, np.zeros((nBins,))) for vn in systVarNames) ## including overflows
         systInteg = 0. ## TODO FIXME
         for systN, systInBins in iteritems(systPerBin):
-            for contrib in self._entries:
-                if systN == "lumi": ## TODO like this ?
-                    pass
-                else:
-                    syst = contrib.systVars[systN]
-                    maxVarPerBin = np.array([ max(abs(syst.up(i)-syst.nom(i)), abs(syst.down(i)-syst.nom(i))) for i in iter(binRange) ])
-                    systInBins += maxVarPerBin
-                    systInteg += np.sum(maxVarPerBin)
+            for contrib in self.entries:
+                syst = contrib.systVars[systN]
+                maxVarPerBin = np.array([ max(abs(syst.up(i)-syst.nom(i)), abs(syst.down(i)-syst.nom(i))) for i in iter(binRange) ])
+                systInBins += maxVarPerBin
+                systInteg += np.sum(maxVarPerBin)
 
         totalSystInBins = np.sqrt(sum( binSysts**2 for binSysts in itervalues(systPerBin) ))
         if len(systPerBin) == 0: ## no-syst case
@@ -121,11 +99,11 @@ class THistogramStack(collections.Sequence):
     def getSystematicHisto(self, systVarNames=None):
         """ construct a histogram of the stack total, with only systematic uncertainties """
         systInteg, totalSystInBins = self.getTotalSystematics(systVarNames=systVarNames)
-        return h1u.histoWithErrors(self.stackTotal, totalSystInBins)
+        return h1u.histoWithErrors(self.total, totalSystInBins)
     def getStatSystHisto(self, systVarNames=None):
         """ construct a histogram of the stack total, with statistical+systematic uncertainties """
         systInteg, totalSystInBins = self.getTotalSystematics(systVarNames=systVarNames)
-        return h1u.histoWithErrorsQuadAdded(self.stackTotal, totalSystInBins)
+        return h1u.histoWithErrorsQuadAdded(self.total, totalSystInBins)
     def getRelSystematicHisto(self, systVarNames=None):
         """ construct a histogram of the relative systematic uncertainties for the stack total """
         return h1u.histoDivByValues(self.getSystematicHisto(systVarNames))
@@ -175,7 +153,7 @@ class THistogramRatioPlot(object):
         exp_statsyst = self.expected.getStatSystHisto()
         ax.rerrorbar(exp_statsyst, kind="box", hatch=8*"/", ec="none", fc="none")
         ## observed
-        ax.rerrorbar(self.observed.stackTotal, kind="bar", fmt="ko")
+        ax.rerrorbar(self.observed.total, kind="bar", fmt="ko")
 
     def drawRatio(self, ax=None):
         if ax is None:
@@ -183,7 +161,7 @@ class THistogramRatioPlot(object):
 
         ax.axhline(1., color="k") ## should be made optional, and take options for style (or use the grid settings)
 
-        rx,ry,ryerr = h1u.divide(self.observed.stackTotal, self.expected.stackTotal)
+        rx,ry,ryerr = h1u.divide(self.observed.total, self.expected.total)
         ax.errorbar(rx, ry, yerr=ryerr, fmt="ko")
 
         ## then systematics...

@@ -7,6 +7,7 @@ __all__ = ("HistoKey", "SystVarsForHist",
           )
 
 import itertools
+from . import logger
 from . import histo_utils as h1u
 
 class MemHistoKey(object):
@@ -73,6 +74,8 @@ class HistoKey(object):
                 addOverflow(res, res.GetXaxis().GetFirst(), True )
                 addOverflow(res, res.GetXaxis().GetLast() , False)
             if self.scale != 1.:
+                if not res.GetSumw2():
+                    res.Sumw2()
                 res.Scale(self.scale)
             if self.rebin != 1:
                 res.Rebin(self.rebin)
@@ -105,12 +108,12 @@ class SystVar(object):
         self.pretty_name = pretty_name if pretty_name is not None else name
         self.on = on if on is not None else SystVar.default_filter
         super(SystVar, self).__init__()
-    def __repr_args(self):
+    def _repr_args(self):
         return (self.name,)
-    def __repr_kwargs(self):
+    def _repr_kwargs(self):
         return tuple((["pretty_name"] if self.pretty_name != self.name else [])+(["on"] if self.on != SystVar.default_filter else []))
     def __repr__(self):
-        return "{0}({1})".format(self.__class__.__name__, ", ".join(itertools.chain((repr(a) for a in self.__repr_args()), ("{0}={1!r}".format(k,getattr(self, k)) for k in self.__repr_kwargs()))))
+        return "{0}({1})".format(self.__class__.__name__, ", ".join(itertools.chain((repr(a) for a in self._repr_args()), ("{0}={1!r}".format(k,getattr(self, k)) for k in self._repr_kwargs()))))
 
     def forHist(self, hist):
         """ get variation for hist """
@@ -132,8 +135,8 @@ class SystVar(object):
             """ Down variation for bin i """
             pass
 
-import collections
-class SystVarsForHist(collections.Mapping):
+import collections.abc
+class SystVarsForHist(collections.abc.Mapping):
     """ dict-like object to assign as systVars to an entry
 
     (parent is the actual dictionary with SystVars) """
@@ -177,7 +180,7 @@ class ConstantSystVar(ParameterizedSystVar):
     def __init__(self, name, value, pretty_name=None, on=SystVar.default_filter):
         self.value = value
         super(ConstantSystVar, self).__init__(name, pretty_name=pretty_name, on=on)
-    def __repr_args(self):
+    def _repr_args(self):
         return (self.name, self.value)
 
     def nom(self, hist, i):
@@ -242,7 +245,7 @@ class ShapeSystVar(SystVar):
                     if vf.Get(self.hist.name):
                         return self.hist.clone(tfile=vf)
                     else:
-                        print("Could not find '{0}' in file '{1}'".format(self.hist.name, variPath))
+                        logger.error("Could not find '{0}' in file '{1}'".format(self.hist.name, variPath))
                         #raise KeyError()
                 else:
                     pass ## fail quietly
