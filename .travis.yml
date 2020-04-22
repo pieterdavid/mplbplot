@@ -5,6 +5,10 @@ python:
   - "2.7"
 env:
   - ROOT_VERSION_FULL=v6.20.04.Linux-ubuntu18-x86_64-gcc7.5
+addons:
+  apt:
+    packages:
+    - libgsl23
 before_install:
   - wget https://root.cern/download/root_${ROOT_VERSION_FULL}.tar.gz
   - tar xf root_${ROOT_VERSION_FULL}.tar.gz
