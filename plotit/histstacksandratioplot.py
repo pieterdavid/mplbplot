@@ -5,123 +5,11 @@ Helper objects for plots with several stacks (e.g. data and and simulation)
 WARNING: work in progress, some things are not implemented yet
 """
 
-import numpy as np
 from builtins import zip, range
-from future.utils import iteritems, itervalues
-from itertools import chain, islice
+from future.utils import iteritems
 
 from . import histo_utils as h1u
-
-class THistogramStack(object):
-    """
-    Python equivalent of THStack
-
-    For the simplest cases, calling `matplotlib.axes.hist` with list arguments works,
-    but for automatic calculation of statistical/systematic/combined uncertainties
-    on the total, and ratios between stacks, a container object is helpful
-    """
-    def __init__(self):
-        self.entries = [] # list of histograms (entries) used to build the stack
-        self._total = None ## sum histogram (lazy, constructed when accessed and cached)
-        self._totalSystAll = None
-
-    def add(self, hist):
-        """ Add a histogram to a stack """
-        if self._total:
-            raise RuntimeError("Stack has been built, no more entries should be added")
-        self.entries.append(hist)
-
-    def contributions(self):
-        """ Iterate over contributions (histograms inside all entries) - for systematics calculation etc. """
-        for entry in self.entries:
-            yield from entry.contributions()
-
-    @property
-    def total(self):
-        """ upper stack histogram """
-        if ( not self._total ) and self.entries:
-            hSt = h1u.cloneHist(self.entries[0].obj)
-            for nh in islice(self.entries, 1, None):
-                hSt.Add(nh.obj)
-            self._total = hSt
-        return self._total
-
-    @staticmethod
-    def merge(*stacks):
-        """ Merge two or more stacks """
-        if len(stacks) < 2:
-            return stacks[0]
-        else:
-            from .systematics import MemHist
-            mergedSt = THistogramStack()
-            for i,entry in enumerate(stacks[0].entries):
-                newHist = h1u.cloneHist(entry.obj)
-                for stck in islice(stacks, 1, None):
-                    newHist.Add(stck.entries[i].obj)
-                mergedSt.add(MemHist(newHist), systVars=entry.systVars)
-            return mergedSt
-
-    def allSystVarNames(self):
-        """ Get the list of all systematics affecting the sum histogram """
-        return set(chain.from_iterable(contrib.systVars for contrib in self.contributions()))
-
-    def _calcSystematics(self, systVarNames=None):
-        """ Get the combined systematic uncertainty
-
-        :param systVarNames:    systematic variations to consider (if None, all that are present are used for each histogram)
-        """
-        nBins = self.total.GetNbinsX()
-        binRange = range(1,nBins+1) ## no overflow or underflow
-
-        if systVarNames is not None:
-            systVars = systVarNames
-        else:
-            systVars = self.allSystVarNames()
-
-        ## TODO possible optimisations
-        ## - build up the sum piece by piece (no dict then)
-        ## - make entries the outer loop
-        ## - calculate a systematic on the total if it applies to all entries and is parameterized
-        systPerBin = dict((vn, np.zeros((nBins,))) for vn in systVars) ## including overflows
-        maxVarPerBin = np.zeros((nBins,)) ## helper object - reduce allocations
-        systInteg = 0. ## TODO FIXME
-        for systN, systInBins in iteritems(systPerBin):
-            for contrib in self.contributions():
-                syst = contrib.systVars.get(systN)
-                if syst is not None:
-                    for i in iter(binRange):
-                        maxVarPerBin[i-1] = max(abs(syst.up(i)-syst.nom(i)), abs(syst.down(i)-syst.nom(i)))
-                    systInBins += maxVarPerBin
-                    systInteg += np.sum(maxVarPerBin)
-
-        totalSystInBins = np.sqrt(sum( binSysts**2 for binSysts in itervalues(systPerBin) ))
-        if len(systPerBin) == 0: ## no-syst case
-            totalSystInBins = np.zeros((nBins,))
-
-        if systVarNames is None:
-            self._totalSystAll = systInteg, totalSystInBins
-
-        return systInteg, totalSystInBins
-
-    def getTotalSystematics(self, systVarNames=None):
-        if systVarNames is not None:
-            return self._calcSystematics(systVarNames=systVarNames)
-        else:
-            if self._totalSystAll is None:
-                self._calcSystematics()
-            return self._totalSystAll
-
-    def getSystematicHisto(self, systVarNames=None):
-        """ construct a histogram of the stack total, with only systematic uncertainties """
-        __, totalSystInBins = self.getTotalSystematics(systVarNames=systVarNames)
-        return h1u.histoWithErrors(self.total, totalSystInBins)
-    def getStatSystHisto(self, systVarNames=None):
-        """ construct a histogram of the stack total, with statistical+systematic uncertainties """
-        __, totalSystInBins = self.getTotalSystematics(systVarNames=systVarNames)
-        return h1u.histoWithErrorsQuadAdded(self.total, totalSystInBins)
-    def getRelSystematicHisto(self, systVarNames=None):
-        """ construct a histogram of the relative systematic uncertainties for the stack total """
-        return h1u.histoDivByValues(self.getSystematicHisto(systVarNames))
+from .plotit import Stack
 
 class THistogramRatioPlot(object):
     """
@@ -146,8 +34,8 @@ class THistogramRatioPlot(object):
         #self.ax  = fig.add_axes((.17, .30, .8, .65), adjustable="box-forced", xlabel="", xticklabels=[]) ## left, bottom, width, height
         #self.rax = fig.add_axes((.17, .13, .8, .15), adjustable="box-forced")
 
-        self.expected = expected if expected is not None else THistogramStack()
-        self.observed = observed if observed is not None else THistogramStack()
+        self.expected = expected if expected is not None else Stack()
+        self.observed = observed if observed is not None else Stack()
         self.other = other if other is not None else dict() ## third category: stacks that are just overlaid but don't take part in the ratio
     def __getitem__(self, ky):
         return self.other[ky]
