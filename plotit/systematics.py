@@ -43,6 +43,7 @@ class SystVar(object):
         def __init__(self, hist, systVar):
             self.hist = hist
             self.systVar = systVar
+        ## TODO optimisation: return the list(s) of deviations in one call
         def nom(self, i):
             """ Nominal value for bin i """
             pass

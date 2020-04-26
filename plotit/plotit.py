@@ -52,8 +52,6 @@ class MemHistoKey(object):
     """ mini-version for in-memory histograms """
     def __init__(self, obj):
         self.obj = obj
-    def __getattr__(self, name):
-        return getattr(self.obj, name)
 
 class HistoKey(object):
     """
@@ -116,10 +114,28 @@ class HistoKey(object):
         if not self._obj:
             self._get()
         return self._obj
-    def __getattr__(self, name):
-        return getattr(self.obj, name)
     def getStyleOpt(self, name):
         return getattr(self.hFile.cfg, name)
+
+class GroupHistoKey(object):
+    __slots__ = ("_obj", "entries", "plotStyle")
+    def __init__(self, entries, plotStyle=None):
+        self._obj = None
+        self.entries = entries
+        self.plotStyle = plotStyle if plotStyle is not None else entries[0].hFile.cfg
+    def _get(self):
+        res = h1u.cloneHist(sef.entries[0].hist.obj)
+        for entry in islice(self.entries, 1, None):
+            res.Add(entry.hist.obj)
+        self._obj = res
+    @property
+    def obj(self):
+        """ the underlying TH1 object """
+        if not self._obj:
+            self._get()
+        return self._obj
+    def getStyleOpt(self, name):
+        return getattr(self.plotStyle, name)
 
 def drawPlot(plot, expStack, obsStack, outdir="."):
     from .histstacksandratioplot import THistogramRatioPlot
@@ -160,9 +176,9 @@ def plotIt(plots, files, groups=None, systematics=None, config=None, outdir=".")
         for f in files:
             hk = f.getKey(aPlot)
             if f.cfg.type == "data":
-                obsStack.add(hk) ##, label=...
+                obsStack.add(hk)
             elif f.cfg.type == "mc":
-                expStack.add(hk, systVars=SystVarsForHist(hk, f.systematics)) ##, label=...
+                expStack.add(hk)
 
         drawPlot(aPlot, expStack, obsStack, outdir=outdir)
 
