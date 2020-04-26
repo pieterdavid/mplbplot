@@ -296,30 +296,6 @@ class Stack(object):
                 mergedSt.add(MemHist(newHist), systVars=entry.systVars)
             return mergedSt
 
-def drawPlot(plot, expStack, obsStack, outdir="."):
-    from .histstacksandratioplot import THistogramRatioPlot
-    theplot = THistogramRatioPlot(expected=expStack, observed=obsStack) ## TODO more opts?
-    theplot.draw()
-    #
-    if plot.x_axis_range:
-        theplot.ax.set_xlim(*plot.x_axis_range)
-    if plot.x_axis:
-        theplot.rax.set_xlabel(plot.x_axis)
-    #
-    if plot.y_axis_range:
-        theplot.ax.set_ylim(*plot.y_axis_range)
-    else:
-        if not plot.log_y:
-            theplot.ax.set_ylim(0.)
-    if plot.y_axis:
-        theplot.ax.set_ylabel(plot.y_axis)
-    elif plot.y_axis_format:
-        pass
-    #
-    import os.path
-    for ext in plot.save_extensions:
-        theplot.fig.savefig(os.path.join(outdir, "{0}.{1}".format(plot.name, ext)))
-
 def plotIt(plots, files, groups=None, systematics=None, config=None, outdir="."):
     ## default kwargs
     if systematics is None:
@@ -337,7 +313,8 @@ def plotIt(plots, files, groups=None, systematics=None, config=None, outdir=".")
             elif f.cfg.type == "mc":
                 expStack.add(hk)
 
-        drawPlot(aPlot, expStack, obsStack, outdir=outdir)
+        from .draw_mpl import drawStackRatioPlot
+        drawStackRatioPlot(aPlot, expStack, obsStack, outdir=outdir)
 
 def _plotIt_histoPath(histoPath, cfgRoot, baseDir):
     import os.path

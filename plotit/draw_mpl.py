@@ -1,8 +1,6 @@
 from __future__ import absolute_import
 """
-Helper objects for plots with several stacks (e.g. data and and simulation)
-
-WARNING: work in progress, some things are not implemented yet
+Helpers to draw plotIt-like plots with matplotlib
 """
 
 from builtins import zip, range
@@ -11,7 +9,31 @@ from future.utils import iteritems
 from . import histo_utils as h1u
 from .plotit import Stack
 
-class THistogramRatioPlot(object):
+def drawStackRatioPlot(plot, expStack, obsStack, outdir="."):
+    from .draw_mpl import StackRatioPlot
+    theplot = StackRatioPlot(expected=expStack, observed=obsStack) ## TODO more opts?
+    theplot.draw()
+    #
+    if plot.x_axis_range:
+        theplot.ax.set_xlim(*plot.x_axis_range)
+    if plot.x_axis:
+        theplot.rax.set_xlabel(plot.x_axis)
+    #
+    if plot.y_axis_range:
+        theplot.ax.set_ylim(*plot.y_axis_range)
+    else:
+        if not plot.log_y:
+            theplot.ax.set_ylim(0.)
+    if plot.y_axis:
+        theplot.ax.set_ylabel(plot.y_axis)
+    elif plot.y_axis_format:
+        pass
+    #
+    import os.path
+    for ext in plot.save_extensions:
+        theplot.fig.savefig(os.path.join(outdir, "{0}.{1}".format(plot.name, ext)))
+
+class StackRatioPlot(object):
     """
     Helper class for the common use case of a pad with two histogram stacks (MC and data or, more generally, expected and observed) and their ratio in a smaller pad below
     """
