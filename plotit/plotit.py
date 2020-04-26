@@ -8,8 +8,6 @@ WARNING: very much work-in-progress, many things are not implemented yet
 """
 from future.utils import iteritems
 
-from collections import OrderedDict as odict
-
 from . import config
 from . import histo_utils as h1u
 from . import logger
@@ -120,6 +118,8 @@ class HistoKey(object):
         return self._obj
     def __getattr__(self, name):
         return getattr(self.obj, name)
+    def getStyleOpt(self, name):
+        return getattr(self.hFile.cfg, name)
 
 def drawPlot(plot, expStack, obsStack, outdir="."):
     from .histstacksandratioplot import THistogramRatioPlot
@@ -160,9 +160,9 @@ def plotIt(plots, files, groups=None, systematics=None, config=None, outdir=".")
         for f in files:
             hk = f.getKey(aPlot)
             if f.cfg.type == "data":
-                obsStack.add(hk) ##, label=..., drawOpts=...
+                obsStack.add(hk) ##, label=...
             elif f.cfg.type == "mc":
-                expStack.add(hk, systVars=SystVarsForHist(hk, f.systematics), drawOpts={"fill_color":f.cfg.fill_color}) ##, label=..., drawOpts=...
+                expStack.add(hk, systVars=SystVarsForHist(hk, f.systematics)) ##, label=...
 
         drawPlot(aPlot, expStack, obsStack, outdir=outdir)
 

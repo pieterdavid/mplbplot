@@ -22,11 +22,10 @@ class THistogramStack(object):
     """
     class Entry(object):
         """ THistogramStack helper class: everything related to one histogram in the stack """
-        def __init__(self, hist, label=None, systVars=None, drawOpts=None):
+        def __init__(self, hist, label=None, systVars=None):
             self.hist = hist
             self.label = label
             self.systVars = systVars if systVars else dict() ## NOTE this can be an actual dictionary, or a small object that knows how to retrieve the variations from the file, as long as systVars[systName].up and systVars[systName].down do what is expected
-            self.drawOpts = drawOpts if drawOpts else dict()
 
     def __init__(self):
         self.entries = [] # list of histograms (entries) used to build the stack
@@ -60,7 +59,7 @@ class THistogramStack(object):
                 newHist = h1u.cloneHist(entry.hist.obj)
                 for stck in stacks[1:]:
                     newHist.Add(stck.entries[i].hist.obj)
-                mergedSt.add(MemHistoKey(newHist), label=entry.label, systVars=entry.systVars, drawOpts=entry.drawOpts)
+                mergedSt.add(MemHistoKey(newHist), label=entry.label, systVars=entry.systVars)
             return mergedSt
 
     def _defaultSystVarNames(self):
@@ -85,10 +84,11 @@ class THistogramStack(object):
         systInteg = 0. ## TODO FIXME
         for systN, systInBins in iteritems(systPerBin):
             for contrib in self.entries:
-                syst = contrib.systVars[systN]
-                maxVarPerBin = np.array([ max(abs(syst.up(i)-syst.nom(i)), abs(syst.down(i)-syst.nom(i))) for i in iter(binRange) ])
-                systInBins += maxVarPerBin
-                systInteg += np.sum(maxVarPerBin)
+                syst = contrib.systVars.get(systN)
+                if syst is not None:
+                    maxVarPerBin = np.array([ max(abs(syst.up(i)-syst.nom(i)), abs(syst.down(i)-syst.nom(i))) for i in iter(binRange) ])
+                    systInBins += maxVarPerBin
+                    systInteg += np.sum(maxVarPerBin)
 
         totalSystInBins = np.sqrt(sum( binSysts**2 for binSysts in itervalues(systPerBin) ))
         if len(systPerBin) == 0: ## no-syst case
@@ -148,7 +148,7 @@ class THistogramRatioPlot(object):
             ax = self.ax
 
         ## expected
-        exp_hists, exp_colors = zip(*((eh.hist.obj, eh.drawOpts.get("fill_color", "white")) for eh in self.expected.entries))
+        exp_hists, exp_colors = zip(*((eh.hist.obj, eh.hist.getStyleOpt("fill_color")) for eh in self.expected.entries))
         ax.rhist(exp_hists, histtype="stepfilled", color=exp_colors, stacked=True)
         exp_statsyst = self.expected.getStatSystHisto()
         ax.rerrorbar(exp_statsyst, kind="box", hatch=8*"/", ec="none", fc="none")
