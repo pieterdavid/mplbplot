@@ -90,11 +90,11 @@ class ParameterizedSystVar(SystVar):
         def __init__(self, hist, systVar):
             super(ParameterizedSystVar.ForHist, self).__init__(hist, systVar)
         def nom(self, i):
-            return self.systVar.nom(self.hist, i)
+            return self.systVar.nom(self.hist.obj, i)
         def up(self, i):
-            return self.systVar.up(self.hist, i)
+            return self.systVar.up(self.hist.obj, i)
         def down(self, i):
-            return self.systVar.down(self.hist, i)
+            return self.systVar.down(self.hist.obj, i)
 
 class ConstantSystVar(ParameterizedSystVar):
     """ constant scale up/down (given as the relative up variation, e.g. 1.2 for 20%) """
@@ -175,11 +175,11 @@ class ShapeSystVar(SystVar):
                 #print("Warning: could not find variation hist of {0} for {1}, assuming no variation then".format(self.hist, self.systVar.name))
                 return self.hist
         def nom(self, i):
-            return self.hist.GetBinContent(i)
+            return self.hist.obj.GetBinContent(i)
         def up(self, i):
-            return self.histUp.GetBinContent(i)
+            return self.histUp.obj.GetBinContent(i)
         def down(self, i):
-            return self.histDown.GetBinContent(i)
+            return self.histDown.obj.GetBinContent(i)
 
 if __name__ == "__main__": ## quick test of the basic functionality
     import ROOT
