@@ -81,19 +81,17 @@ class PlotStyle(BaseYAMLObject):
         return (r,g,b,a)
 
 
-class HistoFileGroup(BaseYAMLObject):
+class Group(BaseYAMLObject):
     optional_attributes = mergeDicts(PlotStyle.optional_attributes, {
               "order"            : None
             })
     def __init__(self, files, **kwargs):
         self.files = files
         self.type = None
-        super(HistoFileGroup, self).__init__(**kwargs)
+        super(Group, self).__init__(**kwargs)
 
-from .systematics import HistoKey
-
-class HistoFile(PlotStyle):
-    required_attributes = set(("path", "type"))
+class File(PlotStyle):
+    required_attributes = set(("type",))
     optional_attributes = mergeDicts(PlotStyle.optional_attributes, {
               "pretty-name"      : None
             , "type"             : "MC"
@@ -112,21 +110,17 @@ class HistoFile(PlotStyle):
             , "era"              : None
             })
     def __init__(self, **kwargs):
-        super(HistoFile, self).__init__(**kwargs)
+        name = kwargs.pop("name")
+        super(File, self).__init__(**kwargs)
         if self.pretty_name is None:
-            self.pretty_name = self.path
+            self.pretty_name = name
         if self.yields_group is None:
             if self.group is not None:
                 self.yields_group = self.group
             elif self.legend is not None:
                 self.yields_group = self.legend
             else:
-                self.yields_group = self.path ## FIXME path
-
-        from cppyy import gbl
-        self._tf = gbl.TFile.Open(self.path)
-    def getKey(self, name, **kwargs):
-        return HistoKey(self._tf, name, **kwargs)
+                self.yields_group = name
 
 class Point(BaseYAMLObject):
     required_attributes = set(("x", "y"))
@@ -238,7 +232,7 @@ def _load_includes(cfgDict, basePath):
                 _load_includes(v, basePath)
     cfgDict.update(updDict)
 
-def makeSystematic(item):
+def parseSystematic(item):
     from .systematics import ShapeSystVar, ConstantSystVar, LogNormalSystVar
     if isinstance(item, str):
         return ShapeSystVar(item)
@@ -267,14 +261,6 @@ def makeSystematic(item):
     else:
         raise ValueError("Invalid systematics node, must be either a string or a map")
 
-def _plotIt_histoPath(histoPath, cfgRoot, baseDir):
-    if os.path.isabs(histoPath):
-        return histoPath
-    elif os.path.isabs(cfgRoot):
-        return os.path.join(cfgRoot, histoPath)
-    else:
-        return os.path.join(baseDir, cfgRoot, histoPath)
-
 def load(mainPath, histodir=".", vetoFileAttributes=tuple()):
     ## load config, with includes
     cfg = _plotit_loadWrapper(mainPath)
@@ -283,20 +269,17 @@ def load(mainPath, histodir=".", vetoFileAttributes=tuple()):
     configuration = cfg["configuration"]
     plotDefaults = dict((k,v) for k,v in iteritems(configuration) if k in ("y-axis-format", "show-overflow", "errors-type"))
     ## files and groups
-    files = dict()
-    for name, fileCfg in iteritems(cfg["files"]):
-        attrs = dict((ak,av) for ak,av in iteritems(fileCfg) if ak not in vetoFileAttributes)
-        files[name] = HistoFile(path=_plotIt_histoPath(name, configuration["root"], histodir), **attrs)
+    files = dict((name, File(name=name, **dict((ak,av) for ak,av in iteritems(fileCfg) if ak not in vetoFileAttributes)))
+            for name, fileCfg in iteritems(cfg["files"]))
     groups = dict()
     for name, groupCfg in iteritems(cfg.get("groups", dict())):
         groupFiles = dict((fName, f) for fName, f in iteritems(files) if f.group == name)
         if groupFiles:
-            group = HistoFileGroup(groupFiles, **groupCfg)
+            group = Group(groupFiles, **groupCfg)
             group.type = next(v for v in itervalues(groupFiles)).type
             groups[name] = group
-    ## plots and systematics
     plots = dict((k, Plot(name=k, **mergeDicts(plotDefaults, v))) for k, v in iteritems(cfg.get("plots", {})))
-    systematics = [ makeSystematic(item) for item in cfg.get("systematics", []) ]
+    systematics = [ parseSystematic(item) for item in cfg.get("systematics", []) ]
     ## lumi systematic
     lumi_err = configuration.get("luminosity-error", 0.)
     if lumi_err != 0.:

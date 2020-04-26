@@ -7,9 +7,24 @@ Based on https://github.com/cp3-llbb/plotIt
 WARNING: very much work-in-progress, many things are not implemented yet
 """
 from . import logger
-from future.utils import iteritems, itervalues
+from future.utils import iteritems
 
 from collections import OrderedDict as odict
+
+from . import config
+
+from .systematics import HistoKey
+
+class File(object):
+    __slots__ = ("name", "path", "cfg", "_tf")
+    def __init__(self, name, path, cfg):
+        self.name = name
+        self.path = path
+        self.cfg = cfg
+        from cppyy import gbl
+        self._tf = gbl.TFile.Open(self.path)
+    def getKey(self, name, **kwargs):
+        return HistoKey(self._tf, name, **kwargs)
 
 def getScaleForFile(f, config):
     """ Infer the scale factor for histograms from the file dict and the overall config """
@@ -64,33 +79,42 @@ def plotIt(plots, files, groups=None, systematics=None, config=None, outdir=".")
             return groups[hFile.group].order
         return 0
 
-    scaleAndSystematicsPerFile = odict((f,
-        (getScaleForFile(f, config), dict((syst.name, syst) for syst in systematics if f.type != "data" and syst.on(fN, f)))
-        ) for fN,f in sorted(iteritems(files), key=lambda itm : getOrder(itm[1], groups=groups), reverse=True))
+    scaleAndSystematicsPerFile = list((f, getScaleForFile(f.cfg, config),
+        dict((syst.name, syst) for syst in systematics if f.cfg.type != "data" and syst.on(f.name, f.cfg)))
+        for f in sorted(files, key=lambda itm : getOrder(itm.cfg, groups=groups), reverse=True))
 
     from .histstacksandratioplot import THistogramStack
     from .systematics import SystVarsForHist
     for pName, aPlot in iteritems(plots):
         obsStack = THistogramStack()
         expStack = THistogramStack()
-        for f, (fScale, fSysts) in iteritems(scaleAndSystematicsPerFile):
-            logger.debug("Scale and systematics for file {0}: {1:f} {2!s}".format(f.pretty_name, fScale, fSysts))
+        for f, fScale, fSysts in scaleAndSystematicsPerFile:
+            logger.debug("Scale and systematics for file {0}: {1:f} {2!s}".format(f.cfg.pretty_name, fScale, fSysts))
             hk = f.getKey(pName, scale=fScale, rebin=aPlot.rebin, xOverflowRange=(aPlot.x_axis_range if aPlot.show_overflow else None))
-            if f.type == "data":
+            if f.cfg.type == "data":
                 obsStack.add(hk) ##, label=..., drawOpts=...
-            elif f.type == "mc":
-                expStack.add(hk, systVars=SystVarsForHist(hk, fSysts), drawOpts={"fill_color":f.fill_color}) ##, label=..., drawOpts=...
+            elif f.cfg.type == "mc":
+                expStack.add(hk, systVars=SystVarsForHist(hk, fSysts), drawOpts={"fill_color":f.cfg.fill_color}) ##, label=..., drawOpts=...
 
         drawPlot(aPlot, expStack, obsStack, outdir=outdir)
 
+def _plotIt_histoPath(histoPath, cfgRoot, baseDir):
+    import os.path
+    if os.path.isabs(histoPath):
+        return histoPath
+    elif os.path.isabs(cfgRoot):
+        return os.path.join(cfgRoot, histoPath)
+    else:
+        return os.path.join(baseDir, cfgRoot, histoPath)
 
 def plotItFromYAML(yamlFileName, histodir=".", outdir="."):
     from .config import load as load_plotIt_YAML
     logger.info("Running like plotIt with config {0}, histodir={1}, outdir={1}".format(yamlFileName, histodir, outdir))
-    config, files, groups, plots, systematics = load_plotIt_YAML(yamlFileName, histodir=histodir)
+    config, fileCfgs, groupCfgs, plots, systematics = load_plotIt_YAML(yamlFileName, histodir=histodir)
+    files = [ File(fNm, _plotIt_histoPath(fNm, config["root"], histodir), fCfg) for fNm, fCfg in fileCfgs.items() ]
     ### get list of files, get list of systs, dict of systs per file; then list of plots: for each plot build the stacks and draw
     ## TODO cfg -> config
-    plotIt(plots, files, groups=groups, systematics=systematics, config=config, outdir=outdir)
+    plotIt(plots, files, groups=groupCfgs, systematics=systematics, config=config, outdir=outdir)
 
 if __name__ == "__main__": ## quick test of basic functionality
     import ROOT
