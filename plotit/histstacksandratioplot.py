@@ -40,7 +40,8 @@ class THistogramStack(object):
 
     def __init__(self):
         self.entries = [] # list of histograms (entries) used to build the stack
-        self._total = None ## sum histograms (lazy, constructed when accessed and cached)
+        self._total = None ## sum histogram (lazy, constructed when accessed and cached)
+        self._totalSystAll = None
 
     def add(self, hist, systVars=None):
         """ Add a histogram to a stack """
@@ -91,23 +92,22 @@ class THistogramStack(object):
                 mergedSt.add(MemHistoKey(newHist), systVars=entry.systVars)
             return mergedSt
 
-    def _defaultSystVarNames(self):
-        """ Get the combined (total rate and per-bin) systematics
-
-        systVarNames: systematic variations to consider (if None, all that are present are used for each histogram)
-        """
+    def allSystVarNames(self):
+        """ Get the list of all systematics affecting the sum histogram """
         return set(chain.from_iterable(contrib.systVars for contrib in self.contributions))
 
-    def getTotalSystematics(self, systVarNames=None):
-        """ Get the combined systematics
+    def _calcSystematics(self, systVarNames=None):
+        """ Get the combined systematic uncertainty
 
-        systVarNames: systematic variations to consider (if None, all that are present are used for each histogram)
+        :param systVarNames:    systematic variations to consider (if None, all that are present are used for each histogram)
         """
         nBins = self.total.GetNbinsX()
         binRange = range(1,nBins+1) ## no overflow or underflow
 
-        if systVarNames is None:
-            systVarNames = self._defaultSystVarNames()
+        if systVarNames is not None:
+            systVars = systVarNames
+        else:
+            systVars = self.allSystVarNames()
 
         ## TODO possible optimisations
         ## - build up the sum piece by piece (no dict then)
@@ -129,20 +129,30 @@ class THistogramStack(object):
         if len(systPerBin) == 0: ## no-syst case
             totalSystInBins = np.zeros((nBins,))
 
+        if systVarNames is None:
+            self._totalSystAll = systInteg, totalSystInBins
+
         return systInteg, totalSystInBins
+
+    def getTotalSystematics(self, systVarNames=None):
+        if systVarNames is not None:
+            return self._calcSystematics(systVarNames=systVarNames)
+        else:
+            if self._totalSystAll is None:
+                self._calcSystematics()
+            return self._totalSystAll
 
     def getSystematicHisto(self, systVarNames=None):
         """ construct a histogram of the stack total, with only systematic uncertainties """
-        systInteg, totalSystInBins = self.getTotalSystematics(systVarNames=systVarNames)
+        __, totalSystInBins = self.getTotalSystematics(systVarNames=systVarNames)
         return h1u.histoWithErrors(self.total, totalSystInBins)
     def getStatSystHisto(self, systVarNames=None):
         """ construct a histogram of the stack total, with statistical+systematic uncertainties """
-        systInteg, totalSystInBins = self.getTotalSystematics(systVarNames=systVarNames)
+        __, totalSystInBins = self.getTotalSystematics(systVarNames=systVarNames)
         return h1u.histoWithErrorsQuadAdded(self.total, totalSystInBins)
     def getRelSystematicHisto(self, systVarNames=None):
         """ construct a histogram of the relative systematic uncertainties for the stack total """
         return h1u.histoDivByValues(self.getSystematicHisto(systVarNames))
-
 
 class THistogramRatioPlot(object):
     """
