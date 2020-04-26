@@ -9,9 +9,9 @@ WARNING: very much work-in-progress, many things are not implemented yet
 from future.utils import iteritems, itervalues
 from builtins import range
 from itertools import chain, islice
+from functools import partial
 import numpy as np
 
-from . import config
 from . import histo_utils as h1u
 from .systematics import SystVarsForHist
 from . import logger
@@ -69,13 +69,6 @@ class Group(object):
     def getHist(self, plot):
         """ Get the histogram for the combination of ``plot`` and this group of samples """
         return GroupHist(self, [ f.getHist(plot) for f in files ])
-
-def getFileOrder(hFile, groups=None):
-    if hFile.order:
-        return hFile.order
-    elif groups and hFile.group in groups:
-        return groups[hFile.group].order
-    return 0
 
 class MemHist(object):
     """ In-memory histogram, minimally compatible with :py:class:`~plotit.plotit.FileHist` """
@@ -296,7 +289,7 @@ class Stack(object):
                 mergedSt.add(MemHist(newHist), systVars=entry.systVars)
             return mergedSt
 
-def plotIt(plots, files, groups=None, systematics=None, config=None, outdir="."):
+def plotIt(plots, samples, groups=None, systematics=None, config=None, outdir="."):
     ## default kwargs
     if systematics is None:
         systematics = list()
@@ -306,7 +299,7 @@ def plotIt(plots, files, groups=None, systematics=None, config=None, outdir=".")
     for pName, aPlot in iteritems(plots):
         obsStack = Stack()
         expStack = Stack()
-        for f in files:
+        for f in samples:
             hk = f.getHist(aPlot)
             if f.cfg.type == "data":
                 obsStack.add(hk)
@@ -316,7 +309,7 @@ def plotIt(plots, files, groups=None, systematics=None, config=None, outdir=".")
         from .draw_mpl import drawStackRatioPlot
         drawStackRatioPlot(aPlot, expStack, obsStack, outdir=outdir)
 
-def _plotIt_histoPath(histoPath, cfgRoot, baseDir):
+def _plotIt_histoPath(histoPath, cfgRoot=".", baseDir="."):
     import os.path
     if os.path.isabs(histoPath):
         return histoPath
@@ -325,17 +318,29 @@ def _plotIt_histoPath(histoPath, cfgRoot, baseDir):
     else:
         return os.path.join(baseDir, cfgRoot, histoPath)
 
+def samplesFromFilesAndGroups(allFiles, groupConfigs):
+    from collections import defaultdict
+    files_by_group = defaultdict(list)
+    groups_and_samples = []
+    for fl in allFiles:
+        if fl.cfg.group and fl.cfg.group in groupConfigs:
+            files_by_group[fl.cfg.group].append(fl)
+        else:
+            if fl.cfg.group:
+                logger.warning("Group {0.cfg.group!r} of sample {0.name!r} not found, adding ungrouped".format(fl))
+            groups_and_samples.append(fl)
+    groups_and_samples += [ Group(gNm, files_by_group[gNm], gCfg)
+            for gNm, gCfg in groupConfigs if gNm in files_by_group ]
+    return sorted(groups_and_samples, key=lambda f : f.cfg.order if f.cfg.order is not None else 0, reverse=True)
+
 def plotItFromYAML(yamlFileName, histodir=".", outdir="."):
     from .config import load as load_plotIt_YAML
     logger.info("Running like plotIt with config {0}, histodir={1}, outdir={1}".format(yamlFileName, histodir, outdir))
     config, fileCfgs, groupCfgs, plots, systematics = load_plotIt_YAML(yamlFileName, histodir=histodir)
-    files = sorted([ File(fNm, _plotIt_histoPath(fNm, config["root"], histodir),
-                          fCfg, config=config, systematics=systematics)
-                    for fNm, fCfg in fileCfgs.items() ],
-                    key=lambda f : getFileOrder(f.cfg, groupCfgs), reverse=True)
-    ### get list of files, get list of systs, dict of systs per file; then list of plots: for each plot build the stacks and draw
-    ## TODO cfg -> config
-    plotIt(plots, files, groups=groupCfgs, systematics=systematics, config=config, outdir=outdir)
+    resolve = partial(_plotIt_histoPath, cfgRoot=config["root"], baseDir=histodir)
+    samples = samplesFromFilesAndGroups([ File(fNm, resolve(fNm), fCfg, config=config, systematics=systematics)
+        for fNm, fCfg in fileCfgs.items() ], groupCfgs)
+    plotIt(plots, samples, systematics=systematics, config=config, outdir=outdir)
 
 if __name__ == "__main__": ## quick test of basic functionality
     import ROOT

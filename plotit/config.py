@@ -3,6 +3,7 @@ from __future__ import absolute_import
 Classes related to loading configuration from YAML
 """
 from . import logger
+from itertools import chain
 from future.utils import iteritems, itervalues
 
 def mergeDicts(first, second):

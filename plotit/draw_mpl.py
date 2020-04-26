@@ -6,6 +6,7 @@ Helpers to draw plotIt-like plots with matplotlib
 from builtins import zip, range
 from future.utils import iteritems
 
+from . import logger
 from . import histo_utils as h1u
 from .plotit import Stack
 
