@@ -52,13 +52,13 @@ class THistogramStack(object):
         if len(stacks) < 2:
             return stacks[0]
         else:
-            from .systematics import MemHistoKey
+            from .systematics import MemHist
             mergedSt = THistogramStack()
             for i,entry in enumerate(stacks[0].entries):
                 newHist = h1u.cloneHist(entry.obj)
                 for stck in islice(stacks, 1, None):
                     newHist.Add(stck.entries[i].obj)
-                mergedSt.add(MemHistoKey(newHist), systVars=entry.systVars)
+                mergedSt.add(MemHist(newHist), systVars=entry.systVars)
             return mergedSt
 
     def allSystVarNames(self):

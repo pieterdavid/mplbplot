@@ -186,7 +186,7 @@ if __name__ == "__main__": ## quick test of the basic functionality
     import ROOT
     ROOT.PyConfig.IgnoreCommandLineOptions = True
     from cppyy import gbl
-    aHist = HistoKey(gbl.TFile.Open("aFile"), "aName", scale=.5) ## aName__frup and aName__frdown are assumed to be also there
+    aHist = FileHist(gbl.TFile.Open("aFile"), "aName", scale=.5) ## aName__frup and aName__frdown are assumed to be also there
     print(aHist.obj)
     systTab = {"fr" : ShapeSystVar("fr"), "lumi" : ConstantSystVar(1.06)}
     histSysTab = SystVarsForHist(aHist, systTab)
