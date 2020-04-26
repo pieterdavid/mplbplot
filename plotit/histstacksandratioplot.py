@@ -11,7 +11,6 @@ from future.utils import iteritems, itervalues
 from itertools import chain, islice
 
 from . import histo_utils as h1u
-from .systematics import SystVarsForHist
 
 class THistogramStack(object):
     """
@@ -21,59 +20,29 @@ class THistogramStack(object):
     but for automatic calculation of statistical/systematic/combined uncertainties
     on the total, and ratios between stacks, a container object is helpful
     """
-    class Entry(object):
-        """ Single-histogram entry (with systematics) """
-        __slots__ = ("hist", "systVars")
-        def __init__(self, hist, systVars=None):
-            self.hist = hist
-            self.systVars = systVars if systVars is not None else SystVarsForHist(hist, hist.hFile.systematics)
-        def contributions(self):
-            yield self
-    class GroupEntry(object):
-        """ Stack entry with several contributions """
-        __slots__ = ("contribs", "hist")
-        def __init__(self, entries, plotStyle=None):
-            self.contribs = entries
-            self.hist = GroupHistoKey(entries, plotStyle=plotStyle)
-        def contributions(self):
-            yield from self.contribs
-
     def __init__(self):
         self.entries = [] # list of histograms (entries) used to build the stack
         self._total = None ## sum histogram (lazy, constructed when accessed and cached)
         self._totalSystAll = None
 
-    def add(self, hist, systVars=None):
+    def add(self, hist):
         """ Add a histogram to a stack """
         if self._total:
             raise RuntimeError("Stack has been built, no more entries should be added")
-        self.entries.append(THistogramStack.Entry(hist, systVars=systVars))
-
-    def addGroup(self, histAndSystList, plotStyle=None): ## TODO construct group plot styles
-        """ Add a histogram to a stack """
-        if self._total:
-            raise RuntimeError("Stack has been built, no more entries should be added")
-        grpEntries = []
-        for arg in histAndSystList:
-            if hasattr(arg, "__iter__"):
-                hist, systVars = arg
-                grpEntries.append(THistogramStack.Entry(hist, systVars=systVars))
-            else:
-                grpEntries.append(THistogramStack.Entry(arg))
-        self.entries.append(GroupEntry(grpEntries, plotStyle=plotStyle))
+        self.entries.append(hist)
 
     def contributions(self):
         """ Iterate over contributions (histograms inside all entries) - for systematics calculation etc. """
         for entry in self.entries:
-            yield from entry.contributions
+            yield from entry.contributions()
 
     @property
     def total(self):
         """ upper stack histogram """
         if ( not self._total ) and self.entries:
-            hSt = h1u.cloneHist(self.entries[0].hist.obj)
+            hSt = h1u.cloneHist(self.entries[0].obj)
             for nh in islice(self.entries, 1, None):
-                hSt.Add(nh.hist.obj)
+                hSt.Add(nh.obj)
             self._total = hSt
         return self._total
 
@@ -86,15 +55,15 @@ class THistogramStack(object):
             from .systematics import MemHistoKey
             mergedSt = THistogramStack()
             for i,entry in enumerate(stacks[0].entries):
-                newHist = h1u.cloneHist(entry.hist.obj)
+                newHist = h1u.cloneHist(entry.obj)
                 for stck in islice(stacks, 1, None):
-                    newHist.Add(stck.entries[i].hist.obj)
+                    newHist.Add(stck.entries[i].obj)
                 mergedSt.add(MemHistoKey(newHist), systVars=entry.systVars)
             return mergedSt
 
     def allSystVarNames(self):
         """ Get the list of all systematics affecting the sum histogram """
-        return set(chain.from_iterable(contrib.systVars for contrib in self.contributions))
+        return set(chain.from_iterable(contrib.systVars for contrib in self.contributions()))
 
     def _calcSystematics(self, systVarNames=None):
         """ Get the combined systematic uncertainty
@@ -113,11 +82,11 @@ class THistogramStack(object):
         ## - build up the sum piece by piece (no dict then)
         ## - make entries the outer loop
         ## - calculate a systematic on the total if it applies to all entries and is parameterized
-        systPerBin = dict((vn, np.zeros((nBins,))) for vn in systVarNames) ## including overflows
+        systPerBin = dict((vn, np.zeros((nBins,))) for vn in systVars) ## including overflows
         maxVarPerBin = np.zeros((nBins,)) ## helper object - reduce allocations
         systInteg = 0. ## TODO FIXME
         for systN, systInBins in iteritems(systPerBin):
-            for contrib in self.contributions:
+            for contrib in self.contributions():
                 syst = contrib.systVars.get(systN)
                 if syst is not None:
                     for i in iter(binRange):
@@ -193,7 +162,7 @@ class THistogramRatioPlot(object):
             ax = self.ax
 
         ## expected
-        exp_hists, exp_colors = zip(*((eh.hist.obj, eh.hist.getStyleOpt("fill_color")) for eh in self.expected.entries))
+        exp_hists, exp_colors = zip(*((eh.obj, eh.getStyleOpt("fill_color")) for eh in self.expected.entries))
         ax.rhist(exp_hists, histtype="stepfilled", color=exp_colors, stacked=True)
         exp_statsyst = self.expected.getStatSystHisto()
         ax.rerrorbar(exp_statsyst, kind="box", hatch=8*"/", ec="none", fc="none")

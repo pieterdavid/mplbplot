@@ -10,6 +10,7 @@ from future.utils import iteritems
 
 from . import config
 from . import histo_utils as h1u
+from .systematics import SystVarsForHist
 from . import logger
 
 class File(object):
@@ -24,7 +25,9 @@ class File(object):
         self.systematics = dict((syst.name, syst) for syst in systematics if self.cfg.type != "data" and syst.on(self.name, self.cfg))
         logger.debug("Scale for file {0.name}: {0.scale:f}; systematics: {0.systematics!s}".format(self))
     def getKey(self, plot, name=None):
-        return HistoKey(histoFile=self, plot=plot, name=name)
+        hk = HistoKey(histoFile=self, plot=plot, name=name)
+        hk.systVars = SystVarsForHist(hk, self.systematics)
+        return hk
     @staticmethod
     def _getScale(fCfg, config):
         """ Infer the scale factor for histograms from the file dict and the overall config """
@@ -52,6 +55,8 @@ class MemHistoKey(object):
     """ mini-version for in-memory histograms """
     def __init__(self, obj):
         self.obj = obj
+    def contributions(self):
+        yield self
 
 class HistoKey(object):
     """
@@ -60,8 +65,8 @@ class HistoKey(object):
     Will lazily load (and cache) the object from the file,
     and apply scaling and rebinning as needed at that point.
     """
-    __slots__ = ("_obj", "name", "tFile", "plot", "hFile")
-    def __init__(self, name=None, tFile=None, plot=None, histoFile=None):
+    __slots__ = ("_obj", "name", "tFile", "plot", "hFile", "systVars")
+    def __init__(self, name=None, tFile=None, plot=None, histoFile=None, systVars=None):
         """ Histogram key constructor. The object is read on first use, and cached.
 
         :param name:        name of the histogram inside the file (taken from ``plot`` if not specified)
@@ -74,14 +79,16 @@ class HistoKey(object):
         self.tFile = tFile if tFile else histoFile._tf
         self.plot = plot
         self.hFile = histoFile
+        self.systVars = systVars
     def __str__(self):
         return 'HistoKey("{0}", "{1}")'.format(self.tFile.GetName(), self.name)
-    def clone(self, name=None, tFile=None, plot=None, histoFile=None):
-        """ Modifying clone method """
+    def clone(self, name=None, tFile=None, plot=None, histoFile=None, systVars=None):
+        """ Modifying clone method. `systVars` is *not* included by default """
         return HistoKey(name=(name if name is not None else self.name),
                         tFile=(tFile if tfile is not None else self.tFile),
                         plot=(plot if plot is not None else self.plot),
-                        histoFile=(histoFile if histoFile is not None else self.histoFile))
+                        histoFile=(histoFile if histoFile is not None else self.histoFile),
+                        systVars=systVars)
     def _get(self):
         ## load the object from the file, and apply transformations as needed
         if ( not self.tFile ) or self.tFile.IsZombie() or ( not self.tFile.IsOpen() ):
@@ -116,13 +123,15 @@ class HistoKey(object):
         return self._obj
     def getStyleOpt(self, name):
         return getattr(self.hFile.cfg, name)
+    def contributions(self):
+        yield self
 
 class GroupHistoKey(object):
-    __slots__ = ("_obj", "entries", "plotStyle")
-    def __init__(self, entries, plotStyle=None):
+    __slots__ = ("_obj", "entries", "group")
+    def __init__(self, group, entries):
         self._obj = None
+        self.group = group
         self.entries = entries
-        self.plotStyle = plotStyle if plotStyle is not None else entries[0].hFile.cfg
     def _get(self):
         res = h1u.cloneHist(sef.entries[0].hist.obj)
         for entry in islice(self.entries, 1, None):
@@ -135,7 +144,18 @@ class GroupHistoKey(object):
             self._get()
         return self._obj
     def getStyleOpt(self, name):
-        return getattr(self.plotStyle, name)
+        return getattr(self.group.cfg, name)
+    def contributions(self):
+        yield from entries
+
+class Group(object):
+    __slots__ = ("name", "files", "cfg")
+    def __init__(self, name, files, gCfg):
+        self.name = name
+        self.cfg = gCfg
+        self.files = files
+    def getKey(self, plot):
+        return GroupHistoKey(self, [ f.getKey(plot) for f in files ])
 
 def drawPlot(plot, expStack, obsStack, outdir="."):
     from .histstacksandratioplot import THistogramRatioPlot
@@ -169,7 +189,6 @@ def plotIt(plots, files, groups=None, systematics=None, config=None, outdir=".")
         config = dict()
 
     from .histstacksandratioplot import THistogramStack
-    from .systematics import SystVarsForHist
     for pName, aPlot in iteritems(plots):
         obsStack = THistogramStack()
         expStack = THistogramStack()
