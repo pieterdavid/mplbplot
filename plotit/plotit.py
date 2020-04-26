@@ -1,6 +1,6 @@
 from __future__ import absolute_import
 """
-plotIt using matplotlib
+Python version of plotIt, for plotting with ROOT or matplotlib
 
 Based on https://github.com/cp3-llbb/plotIt
 
@@ -17,6 +17,14 @@ from .systematics import SystVarsForHist
 from . import logger
 
 class File(object):
+    """
+    plotIt sample or file, since all plots for a sample are in one ROOT file.
+
+    This object mainly holds the open TFile pointer, normalisation scale,
+    and systematics dictionary for the sample. The configuration (from YAML)
+    parameteres are collected in a :py:class:`plotit.config.File` instance,
+    as the `cfg` attribute.
+    """
     __slots__ = ("_tf", "name", "path", "cfg", "scale", "systematics")
     def __init__(self, name, path, fCfg, config=None, systematics=None):
         self.name = name
@@ -27,7 +35,8 @@ class File(object):
         self.scale = File._getScale(self.cfg, config)
         self.systematics = dict((syst.name, syst) for syst in systematics if self.cfg.type != "data" and syst.on(self.name, self.cfg))
         logger.debug("Scale for file {0.name}: {0.scale:f}; systematics: {0.systematics!s}".format(self))
-    def getHisto(self, plot, name=None):
+    def getHist(self, plot, name=None):
+        """ Get the histogram for the combination of ``plot`` and this file/sample """
         hk = FileHist(histoFile=self, plot=plot, name=name)
         hk.systVars = SystVarsForHist(hk, self.systematics)
         return hk
@@ -47,6 +56,20 @@ class File(object):
             else:
                 return mcScale*config.get("scale", 1.)*fCfg.scale
 
+class Group(object):
+    """ Group of samples
+
+    Similar interface as :py:class:`~plotit.plotit.File`, based on a list of those.
+    """
+    __slots__ = ("name", "files", "cfg")
+    def __init__(self, name, files, gCfg):
+        self.name = name
+        self.cfg = gCfg
+        self.files = files
+    def getHist(self, plot):
+        """ Get the histogram for the combination of ``plot`` and this group of samples """
+        return GroupHist(self, [ f.getHist(plot) for f in files ])
+
 def getFileOrder(hFile, groups=None):
     if hFile.order:
         return hFile.order
@@ -55,18 +78,20 @@ def getFileOrder(hFile, groups=None):
     return 0
 
 class MemHist(object):
-    """ mini-version for in-memory histograms """
+    """ In-memory histogram, minimally compatible with :py:class:`~plotit.plotit.FileHist` """
     def __init__(self, obj):
-        self.obj = obj
+        self.obj = obj # the underlying object
     def contributions(self):
         yield self
 
 class FileHist(object):
     """
-    TH1F wrapper to keep track of origin file, name and transformation
+    Histogram from a file, or distribution for one sample.
 
-    Will lazily load (and cache) the object from the file,
-    and apply scaling and rebinning as needed at that point.
+    The actual object is only read into memory when first used.
+    Transformations like scaling and rebinning are also applied then.
+    In addition, references to the sample :py:class:`~plotit.plotit.File`
+    and :py:class:`~plotit.config.Plot` are held.
     """
     __slots__ = ("_obj", "name", "tFile", "plot", "hFile", "systVars")
     def __init__(self, name=None, tFile=None, plot=None, histoFile=None, systVars=None):
@@ -74,7 +99,7 @@ class FileHist(object):
 
         :param name:        name of the histogram inside the file (taken from ``plot`` if not specified)
         :param tFile:       ROOT file with histograms (taken from ``histoFile`` if not specified)
-        :param plot:        :py:class:`plotit.config.Plot` configuration
+        :param plot:        :py:class:`~plotit.config.Plot` configuration
         :param histoFile:   :py:class:`plotit.plotit.File` instance corresponding to the sample
         """
         self._obj = None
@@ -130,11 +155,22 @@ class FileHist(object):
         yield self
 
 class GroupHist(object):
+    """
+    Combined histogram for a group of samples.
+
+    The public interface is almost identical to :py:class:`~plotit.plotit.FileHist`
+    """
     __slots__ = ("_obj", "entries", "group")
     def __init__(self, group, entries):
+        """ Constructor
+
+        :param group: :py:class:`~plotit.plotit.Group` instance
+        :param entries: a :py:lass:`~plotit.plotit.FileHist` for each sample in the group
+        """
         self._obj = None
         self.group = group
         self.entries = entries
+        ## TODO is self.plot needed? explicitly or as property
     def _get(self):
         res = h1u.cloneHist(sef.entries[0].hist.obj)
         for entry in islice(self.entries, 1, None):
@@ -151,22 +187,16 @@ class GroupHist(object):
     def contributions(self):
         yield from entries
 
-class Group(object):
-    __slots__ = ("name", "files", "cfg")
-    def __init__(self, name, files, gCfg):
-        self.name = name
-        self.cfg = gCfg
-        self.files = files
-    def getHisto(self, plot):
-        return GroupHist(self, [ f.getHisto(plot) for f in files ])
-
 class Stack(object):
     """
-    Python equivalent of THStack
+    Stack of distribution contributions from different samples.
 
-    For the simplest cases, calling `matplotlib.axes.hist` with list arguments works,
-    but for automatic calculation of statistical/systematic/combined uncertainties
-    on the total, and ratios between stacks, a container object is helpful
+    The entries are instances of either :py:class:`~plotit.plotit.FileHist` or
+    :py:class:`~plotit.plotit.GroupHist`, for a single sample or a group of them,
+    respectively.
+    In addition to summing the histograms, helper methods to calculate the
+    systematic uncertainty on the total, combined with the statistical uncertainty
+    or not, are provided.
     """
     def __init__(self):
         self.entries = [] # list of histograms (entries) used to build the stack
@@ -301,7 +331,7 @@ def plotIt(plots, files, groups=None, systematics=None, config=None, outdir=".")
         obsStack = Stack()
         expStack = Stack()
         for f in files:
-            hk = f.getHisto(aPlot)
+            hk = f.getHist(aPlot)
             if f.cfg.type == "data":
                 obsStack.add(hk)
             elif f.cfg.type == "mc":
