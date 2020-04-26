@@ -285,7 +285,7 @@ def load(mainPath, histodir=".", vetoFileAttributes=tuple()):
     if lumi_err != 0.:
         from .systematics import ConstantSystVar
         lumisyst = ConstantSystVar("lumi", 1.+lumi_err, pretty_name="Luminosity")
-        logger.debug("Adding luminosity systematic {0!r} {1} {2}".format(lumisyst, str(lumisyst.value), lumisyst._repr_args()))
+        logger.debug("Adding luminosity systematic {0!r}".format(lumisyst))
         systematics.append(lumisyst)
 
     return configuration, files, groups, plots, systematics

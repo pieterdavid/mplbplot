@@ -2,92 +2,10 @@ from __future__ import absolute_import, print_function
 """
 Systematics classes (based on plotIt)
 """
-__all__ = ("HistoKey", "SystVarsForHist",
-           "SystVar", "ParameterizedSystVar", "ConstantSystVar", "LogNormalSystVar", "ShapeSystVar"
-          )
+__all__ = ("SystVar", "SystVarsForHist", "ParameterizedSystVar", "ConstantSystVar", "LogNormalSystVar", "ShapeSystVar")
 
-import itertools
+from itertools import chain
 from . import logger
-from . import histo_utils as h1u
-
-class MemHistoKey(object):
-    """ mini-version for in-memory histograms """
-    def __init__(self, obj):
-        self.obj = obj
-    def __getattr__(self, name):
-        return getattr(self.obj, name)
-
-class HistoKey(object):
-    """
-    TH1F wrapper to keep track of origin file, name and transformation
-
-    Will lazily load (and cache) the object from the TFile,
-    and apply scaling and rebinning as needed at that point.
-    """
-    """ Small wrapper around TH1, to keep track of origin file, name and transformation (scale and rebin) """
-    __slots__ = ("tfile", "name", "scale", "rebin", "xOverflowRange", "_obj")
-    def __init__(self, tfile, name, scale=1., rebin=1, xOverflowRange=None):
-        """ Constructor
-
-        Argments:
-          tfile             TFile reference
-          name              name of the histogram key inside tfile
-        Keyword arguments:
-          scale             normalization scale to apply (relative)
-          rebin             number of bins to group
-          xOverflowRange    visible range of the x-axis (bins outside,
-                            including histogram overflows, will be added
-                            to the first and last bin inside)
-        """
-        self.tfile = tfile
-        self.name = name
-        self.scale = scale
-        self.rebin = rebin
-        self.xOverflowRange = xOverflowRange
-        self._obj = None
-    def __repr__(self):
-        return "HistoKey({0!r}, {1!r}{2})".format(self.tfile, self.name, (", ".join(("", "scale={0:f}".format(self.scale), "rebin={0:d}".format(self.rebin), "xOverflowRange={0}".format(repr(self.xOverflowRange))))))
-    def clone(self, tfile=None, name=None, scale=None, rebin=None, xOverflowRange=None):
-        """ Modifying clone method
-
-        keyword arguments correspond to the constructor arguments.
-        Will make a deep copy (except for the tfile)
-        """
-        return HistoKey( tfile if tfile is not None else self.tfile
-                       , name if str(name) is not None else self.name
-                       , scale=(scale if scale is not None else self.scale )
-                       , rebin=(rebin if rebin is not None else self.rebin )
-                       , xOverflowRange=(tuple(xOverflowRange) if xOverflowRange is not None else self.xOverflowRange )
-                       )
-
-    def _get(self):
-        if ( not self.tfile ) or self.tfile.IsZombie() or ( not self.tfile.IsOpen() ):
-            raise RuntimeError("File '{}'cannot be read".format(self.tfile))
-        res = self.tfile.Get(self.name)
-        if not res:
-            raise KeyError("Could not retrieve key '{0}' from file {1!r}".format(self.name, self.tfile))
-        if ( self.scale != 1. ) or ( self.rebin != 1 ) or ( self.xOverflowRange is not None ):
-            res = h1u.cloneHist(res)
-            if self.xOverflowRange is not None:
-                res.GetXaxis().SetRangeUser(self.xOverflowRange[0], self.xOverflowRange[1])
-                from .histo_utils import addOverflow
-                addOverflow(res, res.GetXaxis().GetFirst(), True )
-                addOverflow(res, res.GetXaxis().GetLast() , False)
-            if self.scale != 1.:
-                if not res.GetSumw2():
-                    res.Sumw2()
-                res.Scale(self.scale)
-            if self.rebin != 1:
-                res.Rebin(self.rebin)
-        self._obj = res
-    @property
-    def obj(self):
-        """ the underlying TH1 object """
-        if not self._obj:
-            self._get()
-        return self._obj
-    def __getattr__(self, name):
-        return getattr(self.obj, name)
 
 class SystVar(object):
     """ interface & base for a systematic variation (without specified histogram) """
@@ -113,7 +31,7 @@ class SystVar(object):
     def _repr_kwargs(self):
         return tuple((["pretty_name"] if self.pretty_name != self.name else [])+(["on"] if self.on != SystVar.default_filter else []))
     def __repr__(self):
-        return "{0}({1})".format(self.__class__.__name__, ", ".join(itertools.chain((repr(a) for a in self._repr_args()), ("{0}={1!r}".format(k,getattr(self, k)) for k in self._repr_kwargs()))))
+        return "{0}({1})".format(self.__class__.__name__, ", ".join(chain((repr(a) for a in self._repr_args()), ("{0}={1!r}".format(k,getattr(self, k)) for k in self._repr_kwargs()))))
 
     def forHist(self, hist):
         """ get variation for hist """
