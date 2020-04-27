@@ -68,7 +68,7 @@ class Group(object):
         self.files = files
     def getHist(self, plot):
         """ Get the histogram for the combination of ``plot`` and this group of samples """
-        return GroupHist(self, [ f.getHist(plot) for f in files ])
+        return GroupHist(self, [ f.getHist(plot) for f in self.files ])
 
 class MemHist(object):
     """ In-memory histogram, minimally compatible with :py:class:`~plotit.plotit.FileHist` """
@@ -165,9 +165,9 @@ class GroupHist(object):
         self.entries = entries
         ## TODO is self.plot needed? explicitly or as property
     def _get(self):
-        res = h1u.cloneHist(sef.entries[0].hist.obj)
+        res = h1u.cloneHist(self.entries[0].obj)
         for entry in islice(self.entries, 1, None):
-            res.Add(entry.hist.obj)
+            res.Add(entry.obj)
         self._obj = res
     @property
     def obj(self):
@@ -178,7 +178,7 @@ class GroupHist(object):
     def getStyleOpt(self, name):
         return getattr(self.group.cfg, name)
     def contributions(self):
-        yield from entries
+        yield from self.entries
 
 class Stack(object):
     """
@@ -330,7 +330,7 @@ def samplesFromFilesAndGroups(allFiles, groupConfigs):
                 logger.warning("Group {0.cfg.group!r} of sample {0.name!r} not found, adding ungrouped".format(fl))
             groups_and_samples.append(fl)
     groups_and_samples += [ Group(gNm, files_by_group[gNm], gCfg)
-            for gNm, gCfg in groupConfigs if gNm in files_by_group ]
+            for gNm, gCfg in groupConfigs.items() if gNm in files_by_group ]
     return sorted(groups_and_samples, key=lambda f : f.cfg.order if f.cfg.order is not None else 0, reverse=True)
 
 def plotItFromYAML(yamlFileName, histodir=".", outdir="."):
