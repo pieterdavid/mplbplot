@@ -45,16 +45,19 @@ class File(object):
     parameteres are collected in a :py:class:`plotit.config.File` instance,
     as the `cfg` attribute.
     """
-    __slots__ = ("_tf", "name", "path", "cfg", "scale", "systematics")
+    __slots__ = ("_tFile", "name", "path", "cfg", "scale", "systematics")
     def __init__(self, name, path, fCfg, config=None, systematics=None):
         self.name = name
         self.path = path
         self.cfg = fCfg
-        from cppyy import gbl
-        self._tf = gbl.TFile.Open(self.path)
+        self._tFile = None
         self.scale = File._getScale(self.cfg, config)
         self.systematics = dict((syst.name, syst) for syst in systematics if self.cfg.type != "data" and syst.on(self.name, self.cfg))
         logger.debug("Scale for file {0.name}: {0.scale:f}; systematics: {0.systematics!s}".format(self))
+    @lazyload
+    def tFile(self):
+        from cppyy import gbl
+        return gbl.TFile.Open(self.path)
     def getHist(self, plot, name=None):
         """ Get the histogram for the combination of ``plot`` and this file/sample """
         hk = FileHist(histoFile=self, plot=plot, name=name)
@@ -106,7 +109,7 @@ class FileHist(object):
     In addition, references to the sample :py:class:`~plotit.plotit.File`
     and :py:class:`~plotit.config.Plot` are held.
     """
-    __slots__ = ("_obj", "name", "tFile", "plot", "hFile", "systVars")
+    __slots__ = ("_obj", "name", "_tFile", "plot", "hFile", "systVars")
     def __init__(self, name=None, tFile=None, plot=None, histoFile=None, systVars=None):
         """ Histogram key constructor. The object is read on first use, and cached.
 
@@ -117,10 +120,13 @@ class FileHist(object):
         """
         self._obj = None
         self.name = name if name else plot.name
-        self.tFile = tFile if tFile else histoFile._tf
+        self._tFile = tFile ## can be explicitly passed, or None (taken from hFile on first use then)
         self.plot = plot
         self.hFile = histoFile
         self.systVars = systVars
+    @lazyload
+    def tFile(self): ## only called if not constructed explicitly
+        return self.hFile.tFile
     def __str__(self):
         return 'FileHist("{0}", "{1}")'.format(self.tFile.GetName(), self.name)
     def clone(self, name=None, tFile=None, plot=None, histoFile=None, systVars=None):
