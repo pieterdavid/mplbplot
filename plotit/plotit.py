@@ -178,7 +178,8 @@ class GroupHist(object):
     def getStyleOpt(self, name):
         return getattr(self.group.cfg, name)
     def contributions(self):
-        yield from self.entries
+        for contrib in self.entries:
+            yield contrib
 
 class Stack(object):
     """
@@ -203,7 +204,8 @@ class Stack(object):
     def contributions(self):
         """ Iterate over contributions (histograms inside all entries) - for systematics calculation etc. """
         for entry in self.entries:
-            yield from entry.contributions()
+            for contrib in entry.contributions():
+                yield contrib
     def _get(self):
         hSt = h1u.cloneHist(self.entries[0].obj)
         for nh in islice(self.entries, 1, None):
