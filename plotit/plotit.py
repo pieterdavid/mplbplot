@@ -24,6 +24,9 @@ class lazyload(object):
     having a separate class helps e.g. with optimisation
     (it is possible to identify all of these to group the loads,
     and clean up the objects).
+
+    If the host class uses __slots__, the appropriate attribute
+    must be defined there (name prefix with an underscore).
     """
     __slots__ = ("load", "_cName")
     def __init__(self, load):
@@ -357,12 +360,3 @@ def plotItFromYAML(yamlFileName, histodir=".", outdir="."):
     samples = samplesFromFilesAndGroups([ File(fNm, resolve(fNm), fCfg, config=config, systematics=systematics)
         for fNm, fCfg in fileCfgs.items() ], groupCfgs)
     plotIt(plots, samples, systematics=systematics, config=config, outdir=outdir)
-
-if __name__ == "__main__": ## quick test of basic functionality
-    import ROOT
-    ROOT.PyConfig.IgnoreCommandLineOptions = True
-    import os.path
-    my_plotit_dir = "" ## FIXME
-    plotItFromYAML(os.path.join(my_plotit_dir, "examples/example.yml"))
-    from matplotlib import pyplot as plt
-    plt.show()

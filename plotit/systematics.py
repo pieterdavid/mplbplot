@@ -181,16 +181,3 @@ class ShapeSystVar(SystVar):
             return self.histUp.obj.GetBinContent(i)
         def down(self, i):
             return self.histDown.obj.GetBinContent(i)
-
-if __name__ == "__main__": ## quick test of the basic functionality
-    import ROOT
-    ROOT.PyConfig.IgnoreCommandLineOptions = True
-    from cppyy import gbl
-    aHist = FileHist(gbl.TFile.Open("aFile"), "aName", scale=.5) ## aName__frup and aName__frdown are assumed to be also there
-    print(aHist.obj)
-    systTab = {"fr" : ShapeSystVar("fr"), "lumi" : ConstantSystVar(1.06)}
-    histSysTab = SystVarsForHist(aHist, systTab)
-    systForHist = histSysTab["fr"]
-    print(systForHist.nom(3), systForHist.up(3), systForHist.down(3))
-    otherSystHi = histSysTab["lumi"]
-    print(otherSystHi.nom(3), otherSystHi.up(3), otherSystHi.down(3))
