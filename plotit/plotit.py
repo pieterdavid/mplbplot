@@ -10,6 +10,7 @@ from future.utils import iteritems, itervalues
 from builtins import range
 from itertools import chain, islice
 from functools import partial
+import numbers
 import numpy as np
 
 from . import histo_utils as h1u
@@ -73,9 +74,11 @@ class File(object):
             return 1.
         else:
             if fCfg.era:
-                lumi = config["eras"][fCfg.era]["luminosity"]
-            else:
+                lumi = config["luminosity"][fCfg.era]
+            elif isinstance(config["luminosity"], numbers.Number):
                 lumi = config["luminosity"]
+            else:
+                lumi = sum(lumi for era,lumi in iteritems(config["luminosity"]))
             mcScale = ( lumi*fCfg.cross_section*fCfg.branching_ratio / fCfg.generated_events )
             if config.get("ignore-scales", False):
                 return mcScale
