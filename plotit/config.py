@@ -262,7 +262,7 @@ def parseSystematic(item):
     else:
         raise ValueError("Invalid systematics node, must be either a string or a map")
 
-def load(mainPath, histodir=".", vetoFileAttributes=tuple()):
+def load(mainPath, vetoFileAttributes=tuple()):
     ## load config, with includes
     cfg = _plotit_loadWrapper(mainPath)
     basedir = os.path.dirname(mainPath)

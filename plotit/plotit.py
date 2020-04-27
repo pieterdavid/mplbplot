@@ -214,8 +214,8 @@ class Stack(object):
     or not, are provided.
     """
     __slots__ = ("entries", "_total", "_totalSystematics")
-    def __init__(self):
-        self.entries = [] # list of histograms (entries) used to build the stack
+    def __init__(self, entries=None):
+        self.entries = list(entries) if entries is not None else list()
         self._total = None
         self._totalSystematics = None
     def add(self, hist):
@@ -308,7 +308,7 @@ class Stack(object):
                 mergedSt.add(MemHist(newHist), systVars=entry.systVars)
             return mergedSt
 
-def plotIt(plots, samples, groups=None, systematics=None, config=None, outdir="."):
+def plotIt(plots, samples, systematics=None, config=None, outdir="."):
     ## default kwargs
     if systematics is None:
         systematics = list()
@@ -328,7 +328,7 @@ def plotIt(plots, samples, groups=None, systematics=None, config=None, outdir=".
         from .draw_mpl import drawStackRatioPlot
         drawStackRatioPlot(aPlot, expStack, obsStack, outdir=outdir)
 
-def _plotIt_histoPath(histoPath, cfgRoot=".", baseDir="."):
+def plotIt_histoPath(histoPath, cfgRoot=".", baseDir="."):
     import os.path
     if os.path.isabs(histoPath):
         return histoPath
@@ -355,8 +355,7 @@ def samplesFromFilesAndGroups(allFiles, groupConfigs):
 def plotItFromYAML(yamlFileName, histodir=".", outdir="."):
     from .config import load as load_plotIt_YAML
     logger.info("Running like plotIt with config {0}, histodir={1}, outdir={1}".format(yamlFileName, histodir, outdir))
-    config, fileCfgs, groupCfgs, plots, systematics = load_plotIt_YAML(yamlFileName, histodir=histodir)
-    resolve = partial(_plotIt_histoPath, cfgRoot=config["root"], baseDir=histodir)
-    samples = samplesFromFilesAndGroups([ File(fNm, resolve(fNm), fCfg, config=config, systematics=systematics)
-        for fNm, fCfg in fileCfgs.items() ], groupCfgs)
+    config, fileCfgs, groupCfgs, plots, systematics = load_plotIt_YAML(yamlFileName)
+    resolve = partial(plotIt_histoPath, cfgRoot=config["root"], baseDir=histodir)
+    samples = samplesFromFilesAndGroups([ File(fNm, resolve(fNm), fCfg, config=config, systematics=systematics) for fNm, fCfg in fileCfgs.items() ], groupCfgs)
     plotIt(plots, samples, systematics=systematics, config=config, outdir=outdir)
