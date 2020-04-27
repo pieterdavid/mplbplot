@@ -16,6 +16,26 @@ from . import histo_utils as h1u
 from .systematics import SystVarsForHist
 from . import logger
 
+class lazyload(object):
+    """
+    Python2 equivalent of a read-only functools.cached_property
+
+    On top of being available also for python before 3.8,
+    having a separate class helps e.g. with optimisation
+    (it is possible to identify all of these to group the loads,
+    and clean up the objects).
+    """
+    __slots__ = ("load", "_cName")
+    def __init__(self, load):
+        self.load = load
+        self._cName = "_{0}".format(load.__name__)
+    def __get__(self, instance, cls):
+        value = getattr(instance, self._cName)
+        if value is None:
+            value = self.load(instance)
+            setattr(instance, self._cName, value)
+        return value
+
 class File(object):
     """
     plotIt sample or file, since all plots for a sample are in one ROOT file.
@@ -110,7 +130,9 @@ class FileHist(object):
                         plot=(plot if plot is not None else self.plot),
                         histoFile=(histoFile if histoFile is not None else self.histoFile),
                         systVars=systVars)
-    def _get(self):
+    @lazyload
+    def obj(self):
+        """ the underlying TH1 object """
         ## load the object from the file, and apply transformations as needed
         if ( not self.tFile ) or self.tFile.IsZombie() or ( not self.tFile.IsOpen() ):
             raise RuntimeError("File '{}'cannot be read".format(self.tFile))
@@ -135,13 +157,7 @@ class FileHist(object):
             if rebin != 1:
                 res.Rebin(rebin)
         ##
-        self._obj = res
-    @property
-    def obj(self):
-        """ the underlying TH1 object """
-        if not self._obj:
-            self._get()
-        return self._obj
+        return res
     def getStyleOpt(self, name):
         return getattr(self.hFile.cfg, name)
     def contributions(self):
@@ -164,17 +180,13 @@ class GroupHist(object):
         self.group = group
         self.entries = entries
         ## TODO is self.plot needed? explicitly or as property
-    def _get(self):
+    @lazyload
+    def obj(self):
+        """ the underlying TH1 object """
         res = h1u.cloneHist(self.entries[0].obj)
         for entry in islice(self.entries, 1, None):
             res.Add(entry.obj)
-        self._obj = res
-    @property
-    def obj(self):
-        """ the underlying TH1 object """
-        if not self._obj:
-            self._get()
-        return self._obj
+        return res
     def getStyleOpt(self, name):
         return getattr(self.group.cfg, name)
     def contributions(self):
@@ -192,10 +204,11 @@ class Stack(object):
     systematic uncertainty on the total, combined with the statistical uncertainty
     or not, are provided.
     """
+    __slots__ = ("entries", "_total", "_totalSystematics")
     def __init__(self):
         self.entries = [] # list of histograms (entries) used to build the stack
-        self._total = None ## sum histogram (lazy, constructed when accessed and cached)
-        self._totalSystAll = None
+        self._total = None
+        self._totalSystematics = None
     def add(self, hist):
         """ Add a histogram to a stack """
         if self._total:
@@ -206,21 +219,19 @@ class Stack(object):
         for entry in self.entries:
             for contrib in entry.contributions():
                 yield contrib
-    def _get(self):
+    @lazyload
+    def total(self):
+        """ upper stack histogram """
+        if not self.entries:
+            raise RuntimeError("Cannot construct a stack without histogram entries")
         hSt = h1u.cloneHist(self.entries[0].obj)
         for nh in islice(self.entries, 1, None):
             hSt.Add(nh.obj)
-        self._total = hSt
-    @property
-    def total(self):
-        """ upper stack histogram """
-        if ( not self._total ) and self.entries:
-            self._get()
-        return self._total
+        return hSt
     def allSystVarNames(self):
         """ Get the list of all systematics affecting the sum histogram """
         return set(chain.from_iterable(contrib.systVars for contrib in self.contributions()))
-    def _calcSystematics(self, systVarNames=None):
+    def calcSystematics(self, systVarNames=None):
         """ Get the combined systematic uncertainty
 
         :param systVarNames:    systematic variations to consider (if None, all that are present are used for each histogram)
@@ -228,16 +239,14 @@ class Stack(object):
         nBins = self.total.GetNbinsX()
         binRange = range(1,nBins+1) ## no overflow or underflow
 
-        if systVarNames is not None:
-            systVars = systVarNames
-        else:
-            systVars = self.allSystVarNames()
+        if systVarNames is None:
+            systVarNames = self.allSystVarNames()
 
         ## TODO possible optimisations
         ## - build up the sum piece by piece (no dict then)
         ## - make entries the outer loop
         ## - calculate a systematic on the total if it applies to all entries and is parameterized
-        systPerBin = dict((vn, np.zeros((nBins,))) for vn in systVars) ## including overflows
+        systPerBin = dict((vn, np.zeros((nBins,))) for vn in systVarNames) ## including overflows
         maxVarPerBin = np.zeros((nBins,)) ## helper object - reduce allocations
         systInteg = 0. ## TODO FIXME
         for systN, systInBins in iteritems(systPerBin):
@@ -253,17 +262,16 @@ class Stack(object):
         if len(systPerBin) == 0: ## no-syst case
             totalSystInBins = np.zeros((nBins,))
 
-        if systVarNames is None:
-            self._totalSystAll = systInteg, totalSystInBins
-
         return systInteg, totalSystInBins
+    @lazyload
+    def totalSystematics(self):
+        """ (integral-total-systematic, array-of-bin-total-systematic-uncertainties) """
+        return self.calcSystematics(systVarNames=None)
     def getTotalSystematics(self, systVarNames=None):
-        if systVarNames is not None:
-            return self._calcSystematics(systVarNames=systVarNames)
+        if systVarNames is None:
+            return self.totalSystematics
         else:
-            if self._totalSystAll is None:
-                self._calcSystematics()
-            return self._totalSystAll
+            return self.getTotalSystematics(systVarNames=systVarNames)
     def getSystematicHisto(self, systVarNames=None):
         """ construct a histogram of the stack total, with only systematic uncertainties """
         __, totalSystInBins = self.getTotalSystematics(systVarNames=systVarNames)
