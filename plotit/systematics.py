@@ -7,6 +7,8 @@ __all__ = ("SystVar", "SystVarsForHist", "ParameterizedSystVar", "ConstantSystVa
 from itertools import chain
 from . import logger
 
+from .plotit import lazyload
+
 class SystVar(object):
     """ interface & base for a systematic variation (without specified histogram) """
     @staticmethod
@@ -147,10 +149,15 @@ class ShapeSystVar(SystVar):
         super(ShapeSystVar, self).__init__(name, pretty_name=pretty_name, on=on)
 
     class ForHist(SystVar.ForHist):
+        __slots__ = ("_histUp", "_histDown")
         def __init__(self, hist, systVar):
             super(ShapeSystVar.ForHist, self).__init__(hist, systVar)
-            self.histUp = self._findVarHist("up")
-            self.histDown = self._findVarHist("down")
+        @lazyload
+        def histUp(self):
+            return self._findVarHist("up")
+        @lazyload
+        def histDown(self):
+            return self._findVarHist("down")
         def _findVarHist(self, vari):
             variHistName = "{0}__{1}{2}".format(self.hist.name, self.systVar.name, vari)
             if self.hist.tfile.Get(variHistName):

@@ -14,7 +14,6 @@ import numbers
 import numpy as np
 
 from . import histo_utils as h1u
-from .systematics import SystVarsForHist
 from . import logger
 
 class lazyload(object):
@@ -65,6 +64,7 @@ class File(object):
     def getHist(self, plot, name=None):
         """ Get the histogram for the combination of ``plot`` and this file/sample """
         hk = FileHist(histoFile=self, plot=plot, name=name)
+        from .systematics import SystVarsForHist
         hk.systVars = SystVarsForHist(hk, self.systematics)
         return hk
     @staticmethod
@@ -318,6 +318,57 @@ class Stack(object):
                     newHist.Add(stck.entries[i].obj)
                 mergedSt.add(MemHist(newHist), systVars=entry.systVars)
             return mergedSt
+
+def loadHistograms(stacks):
+    """ Efficiently load all histograms needed to draw the stacks from disk """
+    if not hasattr(stacks, "__iter__"):
+        stacks = [ stacks ]
+    from .systematics import ShapeSystVar
+    from collections import defauldict
+    h_per_file = defaultdict(list)
+    for st in stacks:
+        for contrib in st.contributions():
+            if isinstance(contrib, FileHist):
+                h_per_file[contrib.hFile.path].append(contrib)
+    nOKTot, nFailTot = 0, 0
+    for fPath, fHKs in iteritems(h_per_file):
+        nOK, nFail = 0, 0
+        for hk in fHKs:
+            if hk.obj is not None: ## trigger load
+                nOK += 1
+            else:
+                nFail += 1
+            if hk.systVars:
+                for sv in itervalues(hk.systVars):
+                    if isinstance(sv, ShapeSystVar.ForHist):
+                        if sv.histUp.obj is not None:
+                            nOK += 1
+                        else:
+                            nFail += 1
+                        if sv.histDown.obj is not None:
+                            nOK += 1
+                        else:
+                            nFail += 1
+        logger.debug(f"Loaded {nOK} histograms from file {fPath} ({nFail} failed)")
+        nOKTot += nOK
+        nFailTot += nFail
+    logger.debug(f"Loaded {nOKTot} histograms from {len(h_per_file)} files ({nFailTot} failed)")
+
+def clearHistograms(stacks):
+    """ Efficiently load all histograms needed to draw the stacks from disk """
+    if not hasattr(stacks, "__iter__"):
+        stacks = [ stacks ]
+    from .systematics import ShapeSystVar
+    nCleared, nEmpty = 0, 0
+    for st in stacks:
+        for cb in st.contributions():
+            if isinstance(cb, FileHist):
+                if cb._obj:
+                    del cb._obj
+                    nCleared += 1
+                else:
+                    nEmpty += 1
+    logger.debug(f"Cleared {nCleared} histograms from memory ({nEmpty} were not loaded)")
 
 def makeStackRatioPlots(plots, samples, systematics=None, config=None, outdir=".", backend="matplotlib"):
     """
