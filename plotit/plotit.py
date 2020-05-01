@@ -84,6 +84,8 @@ class File(object):
                 return mcScale
             else:
                 return mcScale*config.get("scale", 1.)*fCfg.scale
+    def __repr__(self):
+        return f"File({self.path!r}, scale={self.scale}, systematics={self.systematics!r})"
 
 class Group(object):
     """ Group of samples
@@ -98,6 +100,8 @@ class Group(object):
     def getHist(self, plot):
         """ Get the histogram for the combination of ``plot`` and this group of samples """
         return GroupHist(self, [ f.getHist(plot) for f in self.files ])
+    def __repr__(self):
+        return f"Group({self.name!r}, {self.files!r})"
 
 class MemHist(object):
     """ In-memory histogram, minimally compatible with :py:class:`~plotit.plotit.FileHist` """
@@ -105,6 +109,8 @@ class MemHist(object):
         self.obj = obj # the underlying object
     def contributions(self):
         yield self
+    def __repr__(self):
+        return f"MemHist({self.obj!r})"
 
 class FileHist(object):
     """
@@ -174,6 +180,8 @@ class FileHist(object):
         return getattr(self.hFile.cfg, name)
     def contributions(self):
         yield self
+    def __repr__(self):
+        return f"FileHist({self.name!r}, {self.hFile!r})"
 
 class GroupHist(object):
     """
