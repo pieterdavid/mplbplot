@@ -363,6 +363,7 @@ def getHistoPath(histoPath, cfgRoot=".", baseDir="."):
         return os.path.join(baseDir, cfgRoot, histoPath)
 
 def samplesFromFilesAndGroups(allFiles, groupConfigs, eras=None):
+    """ Group and sort files that should be included for a era (or a set of eras) """
     from collections import defaultdict
     files_by_group = defaultdict(list)
     groups_and_samples = []
@@ -379,6 +380,7 @@ def samplesFromFilesAndGroups(allFiles, groupConfigs, eras=None):
     return sorted(groups_and_samples, key=lambda f : f.cfg.order if f.cfg.order is not None else 0, reverse=True)
 
 def samplesForEras(samples, eras=None):
+    """ Reduce a list of samples (files and groups) to those that should be included for a specific era (or a set of eras) """
     if isinstance(eras, str):
         eras = [eras]
     selSamples = []
