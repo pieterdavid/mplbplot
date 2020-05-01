@@ -83,19 +83,21 @@ class PlotStyle(BaseYAMLObject):
 
 
 class Group(BaseYAMLObject):
+    required_attributes = ("type", "files")
     optional_attributes = mergeDicts(PlotStyle.optional_attributes, {
               "order"            : None
             })
     def __init__(self, files, **kwargs):
-        self.files = files
-        self.type = None
+        kwargs["files"] = files
+        kwargs["type"] = kwargs.pop("type", None)
         super(Group, self).__init__(**kwargs)
+        if self.type:
+            self.type = self.type.upper()
 
 class File(PlotStyle):
     required_attributes = set(("type",))
     optional_attributes = mergeDicts(PlotStyle.optional_attributes, {
               "pretty-name"      : None
-            , "type"             : "MC"
             ##
             , "scale"            : 1.
             , "cross-section"    : None
@@ -113,6 +115,7 @@ class File(PlotStyle):
     def __init__(self, **kwargs):
         name = kwargs.pop("name")
         super(File, self).__init__(**kwargs)
+        self.type = self.type.upper()
         if self.pretty_name is None:
             self.pretty_name = name
         if self.yields_group is None:
@@ -280,6 +283,8 @@ def load(mainPath, vetoFileAttributes=None):
         if groupFiles:
             group = Group(groupFiles, **groupCfg)
             group.type = next(v for v in itervalues(groupFiles)).type
+            if not all(v.type == group.type for v in itervalues(groupFiles)):
+                logger.warning("Not all the files with group {0} have the same type: {1}".format(group.name, ", ".join(f"{f.name}: {f.type}" for v in itervalues(groupFiles))))
             groups[name] = group
     plots = dict((k, Plot(name=k, **mergeDicts(plotDefaults, v))) for k, v in iteritems(cfg.get("plots", {})))
     systematics = [ parseSystematic(item) for item in cfg.get("systematics", []) ]

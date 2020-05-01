@@ -56,7 +56,7 @@ class File(object):
         self.cfg = fCfg
         self._tFile = None
         self.scale = File._getScale(self.cfg, config)
-        self.systematics = dict((syst.name, syst) for syst in systematics if self.cfg.type != "data" and syst.on(self.name, self.cfg))
+        self.systematics = dict((syst.name, syst) for syst in systematics if self.cfg.type != "DATA" and syst.on(self.name, self.cfg))
         logger.debug("Scale for file {0.name}: {0.scale:f}; systematics: {0.systematics!s}".format(self))
     @lazyload
     def tFile(self):
@@ -70,7 +70,7 @@ class File(object):
     @staticmethod
     def _getScale(fCfg, config):
         """ Infer the scale factor for histograms from the file dict and the overall config """
-        if fCfg.type == "data":
+        if fCfg.type == "DATA":
             return 1.
         else:
             if fCfg.era:
@@ -323,9 +323,9 @@ def plotIt(plots, samples, systematics=None, config=None, outdir="."):
         expStack = Stack()
         for f in samples:
             hk = f.getHist(aPlot)
-            if f.cfg.type == "data":
+            if f.cfg.type == "DATA":
                 obsStack.add(hk)
-            elif f.cfg.type == "mc":
+            elif f.cfg.type == "MC":
                 expStack.add(hk)
 
         from .draw_mpl import drawStackRatioPlot
