@@ -284,7 +284,7 @@ def load(mainPath, vetoFileAttributes=None):
             group = Group(groupFiles, **groupCfg)
             group.type = next(v for v in itervalues(groupFiles)).type
             if not all(v.type == group.type for v in itervalues(groupFiles)):
-                logger.warning("Not all the files with group {0} have the same type: {1}".format(group.name, ", ".join(f"{f.name}: {f.type}" for v in itervalues(groupFiles))))
+                logger.warning("Not all the files with group {0} have the same type: {1}".format(group.name, ", ".join("{0}: {1}".format(f.name, f.type) for v in itervalues(groupFiles))))
             groups[name] = group
     plots = dict((k, Plot(name=k, **mergeDicts(plotDefaults, v))) for k, v in iteritems(cfg.get("plots", {})))
     systematics = [ parseSystematic(item) for item in cfg.get("systematics", []) ]

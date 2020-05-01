@@ -62,7 +62,7 @@ class File(object):
         from cppyy import gbl
         tf = gbl.TFile.Open(self.path)
         if not tf:
-            logger.error(f"Could not open file {self.path}")
+            logger.error("Could not open file {0}".format(self.path))
         return tf
     def getHist(self, plot, name=None):
         """ Get the histogram for the combination of ``plot`` and this file/sample """
@@ -88,7 +88,7 @@ class File(object):
             else:
                 return mcScale*config.get("scale", 1.)*fCfg.scale
     def __repr__(self):
-        return f"File({self.path!r}, scale={self.scale}, systematics={self.systematics!r})"
+        return "File({0.path!r}, scale={0.scale}, systematics={0.systematics!r})".format(self)
 
 class Group(object):
     """ Group of samples
@@ -104,7 +104,7 @@ class Group(object):
         """ Get the histogram for the combination of ``plot`` and this group of samples """
         return GroupHist(self, [ f.getHist(plot) for f in self.files ])
     def __repr__(self):
-        return f"Group({self.name!r}, {self.files!r})"
+        return "Group({0.name!r}, {0.files!r})".format(self)
 
 class MemHist(object):
     """ In-memory histogram, minimally compatible with :py:class:`~plotit.plotit.FileHist` """
@@ -113,7 +113,7 @@ class MemHist(object):
     def contributions(self):
         yield self
     def __repr__(self):
-        return f"MemHist({self.obj!r})"
+        return "MemHist({0.obj!r})".format(self)
 
 class FileHist(object):
     """
@@ -184,7 +184,7 @@ class FileHist(object):
     def contributions(self):
         yield self
     def __repr__(self):
-        return f"FileHist({self.name!r}, {self.hFile!r})"
+        return "FileHist({0.name!r}, {0.hFile!r})".format(self)
 
 class GroupHist(object):
     """
@@ -353,10 +353,10 @@ def loadHistograms(histograms):
                             nOK += 1
                         else:
                             nFail += 1
-        logger.debug(f"Loaded {nOK} histograms from file {fPath} ({nFail} failed)")
+        logger.debug("Loaded {0:d} histograms from file {1} ({2:d} failed)".format(nOK, fPath, nFail))
         nOKTot += nOK
         nFailTot += nFail
-    logger.debug(f"Loaded {nOKTot} histograms from {len(h_per_file)} files ({nFailTot} failed)")
+    logger.debug("Loaded {0:d} histograms from {1:d} files ({2:d} failed)".format(nOKTot, len(h_per_file), nFailTot))
 
 def clearHistograms(histograms):
     """
@@ -386,7 +386,7 @@ def clearHistograms(histograms):
                             nCleared += 1
                         else:
                             nEmpty += 1
-    logger.debug(f"Cleared {nCleared} histograms from memory ({nEmpty} were not loaded)")
+    logger.debug("Cleared {0:d} histograms from memory ({1:d} were not loaded)".format(nCleared, nEmpty))
 
 def makeStackRatioPlots(plots, samples, systematics=None, config=None, outdir=".", backend="matplotlib", chunkSize=100):
     """
@@ -405,7 +405,7 @@ def makeStackRatioPlots(plots, samples, systematics=None, config=None, outdir=".
     elif backend == "ROOT":
         from .draw_root import drawStackRatioPlot
     else:
-        raise ValueError(f"Unknown backend: {backend!r}, valid choices are 'ROOT' and 'matplotlib'")
+        raise ValueError("Unknown backend: {0!r}, valid choices are 'ROOT' and 'matplotlib'".format(backend))
 
     dataSamples = [ smp for smp in samples if smp.cfg.type == "DATA" ]
     mcSamples = [ smp for smp in samples if smp.cfg.type == "MC" ]
@@ -417,7 +417,7 @@ def makeStackRatioPlots(plots, samples, systematics=None, config=None, outdir=".
                 Stack(entries=[smp.getHist(plot) for smp in mcSamples]),
                 [ smp.getHist(plot) for smp in signalSamples ]
                 )) for plot in itervalues(plots) ]
-    logger.debug(f"Drawing {len(plots)} plots, splitting in chunks of {chunkSize}")
+    logger.debug("Drawing {0:d} plots, splitting in chunks of {1:d}".format(len(plots), chunkSize))
     ## load and draw, in chunks
     for i in range(0, len(stacks_per_plot), chunkSize):
         i_stacks_plots = stacks_per_plot[i:i+chunkSize]
@@ -425,7 +425,7 @@ def makeStackRatioPlots(plots, samples, systematics=None, config=None, outdir=".
             chain(dataStack.contributions(), mcStack.contributions(), sigHists)
             for plot, (dataStack, mcStack, sigHists) in i_stacks_plots))
         for plot, (dataStack, mcStack, sigHists) in i_stacks_plots:
-            logger.debug(f"Drawing plot {plot.name}")
+            logger.debug("Drawing plot {0}".format(plot.name))
             drawStackRatioPlot(plot, mcStack, dataStack, outdir=outdir)
         clearHistograms(chain.from_iterable(
             chain(dataStack.contributions(), mcStack.contributions(), sigHists)
