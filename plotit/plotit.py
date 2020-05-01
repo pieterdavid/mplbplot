@@ -60,7 +60,10 @@ class File(object):
     @lazyload
     def tFile(self):
         from cppyy import gbl
-        return gbl.TFile.Open(self.path)
+        tf = gbl.TFile.Open(self.path)
+        if not tf:
+            logger.error(f"Could not open file {self.path}")
+        return tf
     def getHist(self, plot, name=None):
         """ Get the histogram for the combination of ``plot`` and this file/sample """
         hk = FileHist(histoFile=self, plot=plot, name=name)
@@ -319,17 +322,18 @@ class Stack(object):
                 mergedSt.add(MemHist(newHist), systVars=entry.systVars)
             return mergedSt
 
-def loadHistograms(stacks):
-    """ Efficiently load all histograms needed to draw the stacks from disk """
-    if not hasattr(stacks, "__iter__"):
-        stacks = [ stacks ]
+def loadHistograms(histograms):
+    """
+    Efficiently load all histograms from disk
+
+    :param histograms: nominal histograms iterable. The systematic variations histograms are also found and loaded.
+    """
     from .systematics import ShapeSystVar
-    from collections import defauldict
+    from collections import defaultdict
     h_per_file = defaultdict(list)
-    for st in stacks:
-        for contrib in st.contributions():
-            if isinstance(contrib, FileHist):
-                h_per_file[contrib.hFile.path].append(contrib)
+    for hk in histograms:
+        if isinstance(hk, FileHist):
+            h_per_file[hk.hFile.path].append(hk)
     nOKTot, nFailTot = 0, 0
     for fPath, fHKs in iteritems(h_per_file):
         nOK, nFail = 0, 0
@@ -354,55 +358,78 @@ def loadHistograms(stacks):
         nFailTot += nFail
     logger.debug(f"Loaded {nOKTot} histograms from {len(h_per_file)} files ({nFailTot} failed)")
 
-def clearHistograms(stacks):
-    """ Efficiently load all histograms needed to draw the stacks from disk """
-    if not hasattr(stacks, "__iter__"):
-        stacks = [ stacks ]
+def clearHistograms(histograms):
+    """
+    Clear all histograms
+
+    :param histograms: nominal histograms iterable. The systematic variations histograms are also found and loaded.
+    """
     from .systematics import ShapeSystVar
     nCleared, nEmpty = 0, 0
-    for st in stacks:
-        for cb in st.contributions():
-            if isinstance(cb, FileHist):
-                if cb._obj:
-                    del cb._obj
-                    nCleared += 1
-                else:
-                    nEmpty += 1
+    for hk in histograms:
+        if isinstance(hk, FileHist):
+            if hk._obj:
+                del hk._obj
+                nCleared += 1
+            else:
+                nEmpty += 1
+            if hk.systVars:
+                for sv in itervalues(hk.systVars):
+                    if isinstance(sv, ShapeSystVar.ForHist):
+                        if sv.histUp._obj:
+                            del sv.histUp._obj
+                            nCleared += 1
+                        else:
+                            nEmpty += 1
+                        if sv.histDown._obj:
+                            del sv.histDown._obj
+                            nCleared += 1
+                        else:
+                            nEmpty += 1
     logger.debug(f"Cleared {nCleared} histograms from memory ({nEmpty} were not loaded)")
 
-def makeStackRatioPlots(plots, samples, systematics=None, config=None, outdir=".", backend="matplotlib"):
+def makeStackRatioPlots(plots, samples, systematics=None, config=None, outdir=".", backend="matplotlib", chunkSize=100):
     """
     Draw a traditional plotIt plot: data and MC stack, with (optional) signal distributions and ratio below
 
-    :param plots:
-    :param samples:
+    :param plots: list of plots to draw
+    :param samples: samples (groups and files) to consider
     :param systematics: selected systematics (TODO: implement this)
-    :param config:
-    :param outdir:
-    :param backend:
+    :param config: global config (TODO is this necessary, or can it all be put in the plot config?)
+    :param outdir: output directory
+    :param backend: backend (ROOT or matplotlib)
     """
     ## default kwargs
-    if config is None:
-        config = dict()
-
     if backend == "matplotlib":
         from .draw_mpl import drawStackRatioPlot
     elif backend == "ROOT":
-        pass
+        from .draw_root import drawStackRatioPlot
     else:
         raise ValueError(f"Unknown backend: {backend!r}, valid choices are 'ROOT' and 'matplotlib'")
 
-    for pName, aPlot in iteritems(plots):
-        obsStack = Stack()
-        expStack = Stack()
-        for f in samples:
-            hk = f.getHist(aPlot)
-            if f.cfg.type == "DATA":
-                obsStack.add(hk)
-            elif f.cfg.type == "MC":
-                expStack.add(hk)
+    dataSamples = [ smp for smp in samples if smp.cfg.type == "DATA" ]
+    mcSamples = [ smp for smp in samples if smp.cfg.type == "MC" ]
+    signalSamples = [ smp for smp in samples if smp.cfg.type == "SIGNAL" ]
 
-        drawStackRatioPlot(aPlot, expStack, obsStack, outdir=outdir)
+    ## build stacks
+    stacks_per_plot = [ (plot, (
+                Stack(entries=[smp.getHist(plot) for smp in dataSamples]),
+                Stack(entries=[smp.getHist(plot) for smp in mcSamples]),
+                [ smp.getHist(plot) for smp in signalSamples ]
+                )) for plot in itervalues(plots) ]
+    logger.debug(f"Drawing {len(plots)} plots, splitting in chunks of {chunkSize}")
+    ## load and draw, in chunks
+    for i in range(0, len(stacks_per_plot), chunkSize):
+        i_stacks_plots = stacks_per_plot[i:i+chunkSize]
+        loadHistograms(chain.from_iterable(
+            chain(dataStack.contributions(), mcStack.contributions(), sigHists)
+            for plot, (dataStack, mcStack, sigHists) in i_stacks_plots))
+        for plot, (dataStack, mcStack, sigHists) in i_stacks_plots:
+            logger.debug(f"Drawing plot {plot.name}")
+            drawStackRatioPlot(plot, mcStack, dataStack, outdir=outdir)
+        clearHistograms(chain.from_iterable(
+            chain(dataStack.contributions(), mcStack.contributions(), sigHists)
+            for plot, (dataStack, mcStack, sigHists) in i_stacks_plots))
 
 def getHistoPath(histoPath, cfgRoot=".", baseDir="."):
     import os.path
@@ -464,10 +491,10 @@ def loadFromYAML(yamlFileName, histodir=".", eras=None, vetoFileAttributes=None)
             groupCfgs, eras=(eras if eras is not None else config.get("eras")))
     return config, samples, plots, systematics
 
-def plotItFromYAML(yamlFileName, histodir=".", outdir=".", eras=None, vetoFileAttributes=None):
+def plotItFromYAML(yamlFileName, histodir=".", outdir=".", eras=None, vetoFileAttributes=None, backend="matplotlib"):
     logger.info("Running like plotIt with config {0}, histodir={1}, outdir={1}".format(yamlFileName, histodir, outdir))
     config, samples, plots, systematics = loadFromYAML(yamlFileName, histodir=histodir, eras=eras, vetoFileAttributes=vetoFileAttributes)
-    makeStackRatioPlots(plots, samples, systematics=systematics, config=config, outdir=outdir)
+    makeStackRatioPlots(plots, samples, systematics=systematics, config=config, outdir=outdir, backend=backend)
 
 def makeBaseArgsParser(description=None):
     def optStrList(value):
@@ -495,12 +522,15 @@ def inspectConfig():
 
 def plotIt_cli():
     parser = makeBaseArgsParser(description="Python implementation of the plotIt executable (not fully compatible)" )
-    parser.add_argument("--outdir", default=".", help="Output directory")
+    parser.add_argument("--outdir", "-o", default=".", help="Output directory")
     parser.add_argument("--backend", default="matplotlib", choices=["ROOT", "matplotlib"], help="Backend")
+    parser.add_argument("--verbose", "-v", action="store_true", help="Verbose output")
     args = parser.parse_args()
     import os.path
     if args.histodir:
         histodir = args.histodir
     else:
         histodir = os.path.dirname(args.yamlFile)
+    import logging
+    logging.basicConfig(level=(logging.DEBUG if args.verbose else logging.INFO))
     plotItFromYAML(args.yamlFile, histodir=histodir, outdir=args.outdir, eras=args.eras, vetoFileAttributes=args.vetoFileAttributes, backend=args.backend)
