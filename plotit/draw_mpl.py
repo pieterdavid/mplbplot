@@ -33,6 +33,8 @@ def drawStackRatioPlot(plot, expStack, obsStack, outdir="."):
     import os.path
     for ext in plot.save_extensions:
         theplot.fig.savefig(os.path.join(outdir, "{0}.{1}".format(plot.name, ext)))
+    #
+    theplot.clear()
 
 class StackRatioPlot(object):
     """
@@ -62,6 +64,10 @@ class StackRatioPlot(object):
         self.other = other if other is not None else dict() ## third category: stacks that are just overlaid but don't take part in the ratio
     def __getitem__(self, ky):
         return self.other[ky]
+
+    def clear(self):
+        import matplotlib.pyplot as plt
+        plt.close(self.fig)
 
     def draw(self):### TODO add opts
         self.drawDistribs(self.ax)

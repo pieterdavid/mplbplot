@@ -455,7 +455,7 @@ def samplesFromFilesAndGroups(allFiles, groupConfigs, eras=None):
                 groups_and_samples.append(fl)
     groups_and_samples += [ Group(gNm, files_by_group[gNm], gCfg)
             for gNm, gCfg in groupConfigs.items() if gNm in files_by_group ]
-    return sorted(groups_and_samples, key=lambda f : f.cfg.order if f.cfg.order is not None else 0, reverse=True)
+    return sorted(groups_and_samples, key=lambda f : f.cfg.order if f.cfg.order is not None else 0)
 
 def samplesForEras(samples, eras=None):
     """ Reduce a list of samples (files and groups) to those that should be included for a specific era (or a set of eras) """
