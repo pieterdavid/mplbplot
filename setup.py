@@ -57,5 +57,10 @@ setup(
     package_data={},
     data_files=[],
 
-    entry_points={},
+    entry_points={
+        'console_scripts': [
+            "iPlotIt=plotit.plotit:inspectConfig",
+            "pyPlotIt=plotit.plotit:plotIt_cli",
+            ]
+        },
 )

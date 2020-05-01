@@ -319,12 +319,27 @@ class Stack(object):
                 mergedSt.add(MemHist(newHist), systVars=entry.systVars)
             return mergedSt
 
-def plotIt(plots, samples, systematics=None, config=None, outdir="."):
+def makeStackRatioPlots(plots, samples, systematics=None, config=None, outdir=".", backend="matplotlib"):
+    """
+    Draw a traditional plotIt plot: data and MC stack, with (optional) signal distributions and ratio below
+
+    :param plots:
+    :param samples:
+    :param systematics: selected systematics (TODO: implement this)
+    :param config:
+    :param outdir:
+    :param backend:
+    """
     ## default kwargs
-    if systematics is None:
-        systematics = list()
     if config is None:
         config = dict()
+
+    if backend == "matplotlib":
+        from .draw_mpl import drawStackRatioPlot
+    elif backend == "ROOT":
+        pass
+    else:
+        raise ValueError(f"Unknown backend: {backend!r}, valid choices are 'ROOT' and 'matplotlib'")
 
     for pName, aPlot in iteritems(plots):
         obsStack = Stack()
@@ -336,10 +351,9 @@ def plotIt(plots, samples, systematics=None, config=None, outdir="."):
             elif f.cfg.type == "MC":
                 expStack.add(hk)
 
-        from .draw_mpl import drawStackRatioPlot
         drawStackRatioPlot(aPlot, expStack, obsStack, outdir=outdir)
 
-def plotIt_histoPath(histoPath, cfgRoot=".", baseDir="."):
+def getHistoPath(histoPath, cfgRoot=".", baseDir="."):
     import os.path
     if os.path.isabs(histoPath):
         return histoPath
@@ -364,10 +378,34 @@ def samplesFromFilesAndGroups(allFiles, groupConfigs, eras=None):
             for gNm, gCfg in groupConfigs.items() if gNm in files_by_group ]
     return sorted(groups_and_samples, key=lambda f : f.cfg.order if f.cfg.order is not None else 0, reverse=True)
 
+def samplesForEras(samples, eras=None):
+    if isinstance(eras, str):
+        eras = [eras]
+    selSamples = []
+    for smp in samples:
+        if eras is None:
+            selSamples.append(smp)
+        elif isinstance(smp, File):
+            if smp.era is None or smp.era in eras:
+                selSamples.append(smp)
+        elif isinstance(smp, Group):
+            eraFiles = [ f for f in smp.files if f.era is None or f.era in eras ]
+            if eraEntries:
+                selSamples.append(Group(smp.name, eraFiles, smp.cfg))
+    return selSamples
+
 def loadFromYAML(yamlFileName, histodir=".", eras=None, vetoFileAttributes=None):
+    """
+    Parse a plotIt YAML file
+
+    :param yamlFileName: config file path
+    :param histodir: base path for finding histograms (to be combined with ``'root'`` in configuration and the sample file names)
+    :param eras: selected era, or list of selected eras (default: all that are present)
+    :param vetoFileAttributes: names of file attributes to remove (TODO: to be removed - vetoing can be done when generating plots.yml)
+    """
     from .config import load as load_plotIt_YAML
     config, fileCfgs, groupCfgs, plots, systematics = load_plotIt_YAML(yamlFileName, vetoFileAttributes=vetoFileAttributes)
-    resolve = partial(plotIt_histoPath, cfgRoot=config["root"], baseDir=histodir)
+    resolve = partial(getHistoPath, cfgRoot=config["root"], baseDir=histodir)
     samples = samplesFromFilesAndGroups(
             [ File(fNm, resolve(fNm), fCfg, config=config, systematics=systematics) for fNm, fCfg in fileCfgs.items() ],
             groupCfgs, eras=(eras if eras is not None else config.get("eras")))
@@ -376,4 +414,40 @@ def loadFromYAML(yamlFileName, histodir=".", eras=None, vetoFileAttributes=None)
 def plotItFromYAML(yamlFileName, histodir=".", outdir=".", eras=None, vetoFileAttributes=None):
     logger.info("Running like plotIt with config {0}, histodir={1}, outdir={1}".format(yamlFileName, histodir, outdir))
     config, samples, plots, systematics = loadFromYAML(yamlFileName, histodir=histodir, eras=eras, vetoFileAttributes=vetoFileAttributes)
-    plotIt(plots, samples, systematics=systematics, config=config, outdir=outdir)
+    makeStackRatioPlots(plots, samples, systematics=systematics, config=config, outdir=outdir)
+
+def makeBaseArgsParser(description=None):
+    def optStrList(value):
+        if value:
+            return value.split(",")
+    import argparse
+    parser = argparse.ArgumentParser(description=description)
+    parser.add_argument("yamlFile", help="plotIt configuration file (e.g. plots.yml)")
+    parser.add_argument("--histodir", help="base path for finding histograms (to be combined with ``'root'`` in configuration and the sample file names; default: the directory that contains yamlFile)")
+    parser.add_argument("--eras", type=optStrList, help="Era or (comma-separated) list of eras to consider")
+    parser.add_argument("--vetoFileAttributes", type=optStrList, help="Comma-separated list of file attributes to remove from the config file")
+    return parser
+
+def inspectConfig():
+    parser = makeBaseArgsParser(description="Load and interactively inspect a plotIt config")
+    args = parser.parse_args()
+    import os.path
+    if args.histodir:
+        histodir = args.histodir
+    else:
+        histodir = os.path.dirname(args.yamlFile)
+    config, samples, plots, systematics = loadFromYAML(args.yamlFile, histodir=histodir, eras=args.eras, vetoFileAttributes=args.vetoFileAttributes)
+    import IPython
+    IPython.embed()
+
+def plotIt_cli():
+    parser = makeBaseArgsParser(description="Python implementation of the plotIt executable (not fully compatible)" )
+    parser.add_argument("--outdir", default=".", help="Output directory")
+    parser.add_argument("--backend", default="matplotlib", choices=["ROOT", "matplotlib"], help="Backend")
+    args = parser.parse_args()
+    import os.path
+    if args.histodir:
+        histodir = args.histodir
+    else:
+        histodir = os.path.dirname(args.yamlFile)
+    plotItFromYAML(args.yamlFile, histodir=histodir, outdir=args.outdir, eras=args.eras, vetoFileAttributes=args.vetoFileAttributes, backend=args.backend)
