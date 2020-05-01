@@ -356,12 +356,16 @@ def samplesFromFilesAndGroups(allFiles, groupConfigs, eras=None):
             for gNm, gCfg in groupConfigs.items() if gNm in files_by_group ]
     return sorted(groups_and_samples, key=lambda f : f.cfg.order if f.cfg.order is not None else 0, reverse=True)
 
-def plotItFromYAML(yamlFileName, histodir=".", outdir=".", eras=None):
+def loadFromYAML(yamlFileName, histodir=".", outdir=".", eras=None):
     from .config import load as load_plotIt_YAML
-    logger.info("Running like plotIt with config {0}, histodir={1}, outdir={1}".format(yamlFileName, histodir, outdir))
     config, fileCfgs, groupCfgs, plots, systematics = load_plotIt_YAML(yamlFileName)
     resolve = partial(plotIt_histoPath, cfgRoot=config["root"], baseDir=histodir)
     samples = samplesFromFilesAndGroups(
             [ File(fNm, resolve(fNm), fCfg, config=config, systematics=systematics) for fNm, fCfg in fileCfgs.items() ],
             groupCfgs, eras=(eras if eras is not None else config.get("eras")))
+    return config, samples, plots, systematics
+
+def plotItFromYAML(yamlFileName, histodir=".", outdir=".", eras=None):
+    logger.info("Running like plotIt with config {0}, histodir={1}, outdir={1}".format(yamlFileName, histodir, outdir))
+    config, samples, plots, systematics = loadFromYAML(yamlFileName, histodir=histodir, outdir=outdir, eras=eras)
     plotIt(plots, samples, systematics=systematics, config=config, outdir=outdir)
