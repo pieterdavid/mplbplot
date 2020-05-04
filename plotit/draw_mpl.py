@@ -10,7 +10,12 @@ from . import logger
 from . import histo_utils as h1u
 from .plotit import Stack
 
-def drawStackRatioPlot(plot, expStack, obsStack, outdir="."):
+def drawStackRatioPlot(plot, expStack, obsStack, sigStacks=None, config=None, outdir=".", luminosity=0.):
+    if sigStacks is None:
+        sigStacks = []
+    if config is None:
+        raise ValueError("Need a basic plotIt global config")
+
     from .draw_mpl import StackRatioPlot
     theplot = StackRatioPlot(expected=expStack, observed=obsStack) ## TODO more opts?
     theplot.draw()

@@ -5,6 +5,7 @@ Classes related to loading configuration from YAML
 from . import logger
 from itertools import chain
 from future.utils import iteritems, itervalues
+import numbers
 
 def mergeDicts(first, second):
     """ trivial helper: copy first, update with second and return """
@@ -33,11 +34,12 @@ class BaseYAMLObject(object):
         return "{0}({1})".format(self.__class__.__name__, ", ".join("{0}={1!r}".format(k,getattr(self, BaseYAMLObject._normalizeAttr(k))) for k in chain(self.__class__.required_attributes, (dk for dk,dv in iteritems(self.__class__.optional_attributes) if dv is not getattr(self, BaseYAMLObject._normalizeAttr(dk))))))
 
 class PlotStyle(BaseYAMLObject):
+    required_attributes = ("type",)
     optional_attributes = {
               "legend"          : ""
             , "legend-style"    : None
             , "legend-order"    : 0
-            , "drawing-options" : ""
+            , "drawing-options" : None
             , "marker-size"     : None
             , "marker-color"    : None
             , "marker-type"     : None
@@ -48,28 +50,58 @@ class PlotStyle(BaseYAMLObject):
             , "line-type"       : None
             }
     def __init__(self, **kwargs):
-        typ = kwargs.get("type", "MC").upper()
         super(PlotStyle, self).__init__(**kwargs)
+        if self.type:
+            self.type = self.type.upper()
 
-        if typ == "MC":
-            self.legend_style = "lf"
-        elif typ == "SIGNAL":
-            self.legend_style = "l"
-        elif typ == "MC":
-            self.legend_style = "pe"
+        if self.legend_style is None:
+            if self.type == "MC":
+                self.legend_style = "lf"
+            elif self.type == "SIGNAL":
+                self.legend_style = "l"
+            elif self.type == "MC":
+                self.legend_style = "pe"
 
-        if not self.drawing_options:
-            if typ in ("MC", "SIGNAL"):
+        if self.drawing_options is None:
+            if self.type in ("MC", "SIGNAL"):
                 self.drawing_options = "hist"
-            elif typ == "DATA":
+            elif self.type == "DATA":
                 self.drawing_options = "pe"
+            else:
+                self.drawing_options = ""
 
+        black = PlotStyle.loadColor("#000000")
         if self.fill_color:
             self.fill_color = PlotStyle.loadColor(self.fill_color)
+        elif self.type == "MC":
+            self.fill_color = black
+        if self.fill_type:
+            pass
+        elif self.type == "MC":
+            self.fill_type = 1001
+        elif self.type == "SIGNAL":
+            self.fill_type = 0
+        if self.line_width:
+            pass
+        elif self.type == "MC":
+            self.line_width = 0
+        else:
+            self.line_width = 1
         if self.line_color:
             self.line_color = PlotStyle.loadColor(self.line_color)
+        elif self.type != "MC":
+            self.line_color = black
+        if self.line_type is None and self.type == "SIGNAL":
+            self.line_type = 2 ## TODO something matplotlib also understands
         if self.marker_color:
             self.marker_color = PlotStyle.loadColor(self.marker_color)
+        elif self.type == "DATA":
+            self.marker_color = black ## TODO look up
+        if self.type == "DATA":
+            if self.marker_size is None:
+                self.marker_size = 1
+            if self.marker_type is None:
+                self.marker_type = 20
 
     @staticmethod
     def loadColor(color):
@@ -82,17 +114,20 @@ class PlotStyle(BaseYAMLObject):
         return (r,g,b,a)
 
 
-class Group(BaseYAMLObject):
-    required_attributes = ("type", "files")
+class Group(PlotStyle):
+    required_attributes = tuple(list(PlotStyle.required_attributes)+["files"])
     optional_attributes = mergeDicts(PlotStyle.optional_attributes, {
               "order"            : None
             })
     def __init__(self, files, **kwargs):
         kwargs["files"] = files
-        kwargs["type"] = kwargs.pop("type", None)
+        if files and ("type" not in kwargs):
+            logger.debug("files: {0!r}".format(files))
+            f0type = next(f for f in itervalues(files)).type
+            if not all(f.type == f0type for f in itervalues(files)):
+                logger.warning("Not all the files with group {0} have the same type: {1}".format(kwargs.get("name"), ", ".join("{0}: {1}".format(f.name, f.type) for f in itervalues(files))))
+            kwargs["type"] = f0type
         super(Group, self).__init__(**kwargs)
-        if self.type:
-            self.type = self.type.upper()
 
 class File(PlotStyle):
     required_attributes = set(("type",))
@@ -170,6 +205,7 @@ class Plot(BaseYAMLObject):
             , "show-errors"               : True
             , "x-axis-range"              : None
             , "y-axis-range"              : None
+            , "log-y-axis-range"          : None
             , "ratio-y-axis-range"        : None
             , "blinded-range"             : None
             , "y-axis-show-zero"          : None
@@ -180,7 +216,7 @@ class Plot(BaseYAMLObject):
             , "legend-position"           : None
             , "legend-columns"            : None
             , "show-overflow"             : None
-            , "errors-type"               : None
+            , "errors-type"               : "Poisson" ## TODO get from global ?
             #
             , "binning-x"                 : None
             , "binning-y"                 : None
@@ -207,6 +243,68 @@ class Plot(BaseYAMLObject):
         #        raise ValueError("Could not parse x-axis-range {0}: {1}".format(self.x_axis_range, e))
         #    self.x_axis_range = lims
         self.labels = [ Label(lblNd) for lblNd in self.labels ]
+
+class Configuration(BaseYAMLObject):
+    optional_attributes = {
+              "width"                     : 800
+            , "height"                    : 800
+            , "margin-left"               : 0.17
+            , "margin-right"              : 0.03
+            , "margin-top"                : 0.05
+            , "margin-bottom"             : 0.13
+            #
+            , "eras"                      : []
+            , "luminosity"                : {}
+            , "scale"                     : 1.
+            , "no-lumi-rescaling"         : False
+            , "luminosity-error"          : 0.
+            #
+            , "y-axis-format"             : "%1% / %2$.2f" ## TODO make this a python format
+            , "ratio-y-axis-title"        : "Data / MC"
+            , "ratio-style"               : "P0" ## TODO ???
+            #
+            , "error-fill-color"          : 42   ## TODO ???
+            , "error-fill-style"          : 3154 ## TODO ???
+            #
+            , "fit-n-points"              : 1000
+            , "fit-line-color"            : 46   ## TODO ???
+            , "fit-line-width"            : 1    ## TODO ???
+            , "fit-line-style"            : 1    ## TODO ???
+            , "fit-error-fill-color"      : 42   ## TODO ???
+            , "fit-error-fill-style"      : 1001 ## TODO ???
+            , "ratio-fit-n-points"        : 1000
+            , "ratio-fit-line-color"      : 46   ## TODO ???
+            , "ratio-fit-line-width"      : 1    ## TODO ???
+            , "ratio-fit-line-style"      : 1    ## TODO ???
+            , "ratio-fit-error-fill-color": 42   ## TODO ???
+            , "ratio-fit-error-fill-style": 1001 ## TODO ???
+            # TODO line_style
+            # , "labels" # TODO
+            , "experiment"                : "CMS"
+            , "extra-label"               : ""
+            , "luminosity-label"          : ""
+            , "root"                      : "."
+            #
+            , "transparent-background"    : False
+            , "show-overflow"             : False ## TODO default for plot
+            , "errors-type"               : "Poisson" ## TODO define types
+            , "x-axis-label-size"         : 18
+            , "y-axis-label-size"         : 18
+            , "x-axis-top-ticks"          : True
+            , "y-axis-right-ticks"        : True
+            , "blinded-range-fill-color"  : 42   ## TODO ???
+            , "blinded-range-fill-style"  : 1001 ## TODO ???
+            }
+    def __init__(self, **kwargs):
+        super(Configuration, self).__init__(**kwargs)
+    def getLumi(self, eras=None):
+        if eras is None:
+            if isinstance(self.luminosity, numbers.Number):
+                return self.luminosity
+            else:
+                return sum(eraLumi for eraLumi in itervalues(self.luminosity))
+        else:
+            return sum(self.luminosity[era] for era in eras)
 
 def _plotit_loadWrapper(fpath):
     """ yaml.safe_load from path """
@@ -272,8 +370,8 @@ def load(mainPath, vetoFileAttributes=None):
     cfg = _plotit_loadWrapper(mainPath)
     basedir = os.path.dirname(mainPath)
     _load_includes(cfg, basedir)
-    configuration = cfg["configuration"]
-    plotDefaults = dict((k,v) for k,v in iteritems(configuration) if k in ("y-axis-format", "show-overflow", "errors-type"))
+    configuration = Configuration(**cfg["configuration"])
+    plotDefaults = dict((k,v) for k,v in iteritems(cfg["configuration"]) if k in ("y-axis-format", "show-overflow", "errors-type")) ## TODO may be more?
     ## files and groups
     files = dict((name, File(name=name, **dict((ak,av) for ak,av in iteritems(fileCfg) if ak not in vetoFileAttributes)))
             for name, fileCfg in iteritems(cfg["files"]))
@@ -281,18 +379,13 @@ def load(mainPath, vetoFileAttributes=None):
     for name, groupCfg in iteritems(cfg.get("groups", dict())):
         groupFiles = dict((fName, f) for fName, f in iteritems(files) if f.group == name)
         if groupFiles:
-            group = Group(groupFiles, **groupCfg)
-            group.type = next(v for v in itervalues(groupFiles)).type
-            if not all(v.type == group.type for v in itervalues(groupFiles)):
-                logger.warning("Not all the files with group {0} have the same type: {1}".format(group.name, ", ".join("{0}: {1}".format(f.name, f.type) for v in itervalues(groupFiles))))
-            groups[name] = group
+            groups[name] = Group(groupFiles, **groupCfg)
     plots = dict((k, Plot(name=k, **mergeDicts(plotDefaults, v))) for k, v in iteritems(cfg.get("plots", {})))
     systematics = [ parseSystematic(item) for item in cfg.get("systematics", []) ]
     ## lumi systematic
-    lumi_err = configuration.get("luminosity-error", 0.)
-    if lumi_err != 0.:
+    if configuration.luminosity_error != 0.:
         from .systematics import ConstantSystVar
-        lumisyst = ConstantSystVar("lumi", 1.+lumi_err, pretty_name="Luminosity")
+        lumisyst = ConstantSystVar("lumi", 1.+configuration.luminosity_error, pretty_name="Luminosity")
         logger.debug("Adding luminosity systematic {0!r}".format(lumisyst))
         systematics.append(lumisyst)
 

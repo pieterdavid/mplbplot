@@ -77,16 +77,13 @@ class File(object):
             return 1.
         else:
             if fCfg.era:
-                lumi = config["luminosity"][fCfg.era]
-            elif isinstance(config["luminosity"], numbers.Number):
-                lumi = config["luminosity"]
+                lumi = config.luminosity[fCfg.era]
+            elif isinstance(config.luminosity, numbers.Number):
+                lumi = config.luminosity
             else:
-                lumi = sum(lumi for era,lumi in iteritems(config["luminosity"]))
+                lumi = sum(lumi for era,lumi in iteritems(config.luminosity))
             mcScale = ( lumi*fCfg.cross_section*fCfg.branching_ratio / fCfg.generated_events )
-            if config.get("ignore-scales", False):
-                return mcScale
-            else:
-                return mcScale*config.get("scale", 1.)*fCfg.scale
+            return mcScale*config.scale*fCfg.scale
     def __repr__(self):
         return "File({0.path!r}, scale={0.scale}, systematics={0.systematics!r})".format(self)
 
@@ -388,7 +385,7 @@ def clearHistograms(histograms):
                             nEmpty += 1
     logger.debug("Cleared {0:d} histograms from memory ({1:d} were not loaded)".format(nCleared, nEmpty))
 
-def makeStackRatioPlots(plots, samples, systematics=None, config=None, outdir=".", backend="matplotlib", chunkSize=100):
+def makeStackRatioPlots(plots, samples, systematics=None, config=None, outdir=".", backend="matplotlib", chunkSize=100, luminosity=0.):
     """
     Draw a traditional plotIt plot: data and MC stack, with (optional) signal distributions and ratio below
 
@@ -426,7 +423,7 @@ def makeStackRatioPlots(plots, samples, systematics=None, config=None, outdir=".
             for plot, (dataStack, mcStack, sigHists) in i_stacks_plots))
         for plot, (dataStack, mcStack, sigHists) in i_stacks_plots:
             logger.debug("Drawing plot {0}".format(plot.name))
-            drawStackRatioPlot(plot, mcStack, dataStack, outdir=outdir)
+            drawStackRatioPlot(plot, mcStack, dataStack, outdir=outdir, config=config, luminosity=luminosity)
         clearHistograms(chain.from_iterable(
             chain(dataStack.contributions(), mcStack.contributions(), sigHists)
             for plot, (dataStack, mcStack, sigHists) in i_stacks_plots))
@@ -485,16 +482,16 @@ def loadFromYAML(yamlFileName, histodir=".", eras=None, vetoFileAttributes=None)
     """
     from .config import load as load_plotIt_YAML
     config, fileCfgs, groupCfgs, plots, systematics = load_plotIt_YAML(yamlFileName, vetoFileAttributes=vetoFileAttributes)
-    resolve = partial(getHistoPath, cfgRoot=config["root"], baseDir=histodir)
+    resolve = partial(getHistoPath, cfgRoot=config.root, baseDir=histodir)
     samples = samplesFromFilesAndGroups(
             [ File(fNm, resolve(fNm), fCfg, config=config, systematics=systematics) for fNm, fCfg in fileCfgs.items() ],
-            groupCfgs, eras=(eras if eras is not None else config.get("eras")))
+            groupCfgs, eras=(eras if eras is not None else config.eras))
     return config, samples, plots, systematics
 
 def plotItFromYAML(yamlFileName, histodir=".", outdir=".", eras=None, vetoFileAttributes=None, backend="matplotlib"):
     logger.info("Running like plotIt with config {0}, histodir={1}, outdir={1}".format(yamlFileName, histodir, outdir))
     config, samples, plots, systematics = loadFromYAML(yamlFileName, histodir=histodir, eras=eras, vetoFileAttributes=vetoFileAttributes)
-    makeStackRatioPlots(plots, samples, systematics=systematics, config=config, outdir=outdir, backend=backend)
+    makeStackRatioPlots(plots, samples, systematics=systematics, config=config, outdir=outdir, backend=backend, luminosity=config.getLumi(eras))
 
 def makeBaseArgsParser(description=None):
     def optStrList(value):
@@ -510,12 +507,15 @@ def makeBaseArgsParser(description=None):
 
 def inspectConfig():
     parser = makeBaseArgsParser(description="Load and interactively inspect a plotIt config")
+    parser.add_argument("--verbose", "-v", action="store_true", help="Verbose output")
     args = parser.parse_args()
     import os.path
     if args.histodir:
         histodir = args.histodir
     else:
         histodir = os.path.dirname(args.yamlFile)
+    import logging
+    logging.basicConfig(level=(logging.DEBUG if args.verbose else logging.INFO))
     config, samples, plots, systematics = loadFromYAML(args.yamlFile, histodir=histodir, eras=args.eras, vetoFileAttributes=args.vetoFileAttributes)
     import IPython
     IPython.embed()
