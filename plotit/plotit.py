@@ -413,7 +413,7 @@ def makeStackRatioPlots(plots, samples, systematics=None, config=None, outdir=".
                 Stack(entries=[smp.getHist(plot) for smp in dataSamples]),
                 Stack(entries=[smp.getHist(plot) for smp in mcSamples]),
                 [ smp.getHist(plot) for smp in signalSamples ]
-                )) for plot in itervalues(plots) ]
+                )) for plot in plots ]
     logger.debug("Drawing {0:d} plots, splitting in chunks of {1:d}".format(len(plots), chunkSize))
     ## load and draw, in chunks
     for i in range(0, len(stacks_per_plot), chunkSize):
@@ -450,8 +450,8 @@ def samplesFromFilesAndGroups(allFiles, groupConfigs, eras=None):
                 if fl.cfg.group:
                     logger.warning("Group {0.cfg.group!r} of sample {0.name!r} not found, adding ungrouped".format(fl))
                 groups_and_samples.append(fl)
-    groups_and_samples += [ Group(gNm, files_by_group[gNm], gCfg)
-            for gNm, gCfg in groupConfigs.items() if gNm in files_by_group ]
+    groups_and_samples += [ Group(gCfg.name, files_by_group[gNm], gCfg)
+            for gCfg in groupConfigs if gCfg.name in files_by_group ]
     return sorted(groups_and_samples, key=lambda f : f.cfg.order if f.cfg.order is not None else 0)
 
 def samplesForEras(samples, eras=None):
@@ -471,26 +471,41 @@ def samplesForEras(samples, eras=None):
                 selSamples.append(Group(smp.name, eraFiles, smp.cfg))
     return selSamples
 
-def loadFromYAML(yamlFileName, histodir=".", eras=None, vetoFileAttributes=None):
+def resolveFiles(cFiles, config, systematics=None, histodir="."):
+    """ Resolve paths, and construct :py:class:`plotit.plotit.File` objects (with TFile handles) from :py:class:`plotit.config.File` objects (pure configuration) """
+    if systematics is None:
+        systematics = []
+    resolve = partial(getHistoPath, cfgRoot=config.root, baseDir=histodir)
+    return [ File(fCfg.name, resolve(fCfg.name), fCfg, config=config, systematics=systematics) for fCfg in cFiles ]
+
+def loadFromYAML(yamlFileName, histodir=".", eras=None):
     """
     Parse a plotIt YAML file
 
     :param yamlFileName: config file path
     :param histodir: base path for finding histograms (to be combined with ``'root'`` in configuration and the sample file names)
     :param eras: selected era, or list of selected eras (default: all that are present)
-    :param vetoFileAttributes: names of file attributes to remove (TODO: to be removed - vetoing can be done when generating plots.yml)
-    """
-    from .config import load as load_plotIt_YAML
-    config, fileCfgs, groupCfgs, plots, systematics = load_plotIt_YAML(yamlFileName, vetoFileAttributes=vetoFileAttributes)
-    resolve = partial(getHistoPath, cfgRoot=config.root, baseDir=histodir)
-    samples = samplesFromFilesAndGroups(
-            [ File(fNm, resolve(fNm), fCfg, config=config, systematics=systematics) for fNm, fCfg in fileCfgs.items() ],
-            groupCfgs, eras=(eras if eras is not None else config.eras))
-    return config, samples, plots, systematics
 
-def plotItFromYAML(yamlFileName, histodir=".", outdir=".", eras=None, vetoFileAttributes=None, backend="matplotlib"):
+    :returns: tuple of configuration (``"configuration"`` block), list of samples (groups or ungrouped files), list of plots, list of systematic variations considered, and the legend configuration
+    """
+    from .config import parseWithIncludes
+    yCfg = parseWithIncludes(yamlFileName)
+    ## create config objects from YAML dictionary
+    from .config import loadConfiguration, loadFiles, loadGroups, loadPlots, loadSystematics
+    config = loadConfiguration(yCfg.get("configuration"))
+    cFiles = loadFiles(yCfg.get("files"))
+    cGroups = loadGroups(yCfg.get("groups"), files=cFiles)
+    plots = loadPlots(yCfg.get("plots"), defaultStyle=config)
+    systematics = loadSystematics(yCfg.get("systematics"), configuration=config)
+    legend = None ## TODO add legend class & parsing
+    ## resolve, select, and sort files and groups into samples
+    files = resolveFiles(cFiles, config, systematics=systematics, histodir=histodir)
+    samples = samplesFromFilesAndGroups(files, cGroups, eras=(eras if eras is not None else config.eras))
+    return config, samples, plots, systematics, legend
+
+def plotItFromYAML(yamlFileName, histodir=".", outdir=".", eras=None, backend="matplotlib"):
     logger.info("Running like plotIt with config {0}, histodir={1}, outdir={1}".format(yamlFileName, histodir, outdir))
-    config, samples, plots, systematics = loadFromYAML(yamlFileName, histodir=histodir, eras=eras, vetoFileAttributes=vetoFileAttributes)
+    config, samples, plots, systematics, legend = loadFromYAML(yamlFileName, histodir=histodir, eras=eras)
     makeStackRatioPlots(plots, samples, systematics=systematics, config=config, outdir=outdir, backend=backend, luminosity=config.getLumi(eras))
 
 def makeBaseArgsParser(description=None):
@@ -502,7 +517,6 @@ def makeBaseArgsParser(description=None):
     parser.add_argument("yamlFile", help="plotIt configuration file (e.g. plots.yml)")
     parser.add_argument("--histodir", help="base path for finding histograms (to be combined with ``'root'`` in configuration and the sample file names; default: the directory that contains yamlFile)")
     parser.add_argument("--eras", type=optStrList, help="Era or (comma-separated) list of eras to consider")
-    parser.add_argument("--vetoFileAttributes", type=optStrList, help="Comma-separated list of file attributes to remove from the config file")
     return parser
 
 def inspectConfig():
@@ -516,7 +530,7 @@ def inspectConfig():
         histodir = os.path.dirname(args.yamlFile)
     import logging
     logging.basicConfig(level=(logging.DEBUG if args.verbose else logging.INFO))
-    config, samples, plots, systematics = loadFromYAML(args.yamlFile, histodir=histodir, eras=args.eras, vetoFileAttributes=args.vetoFileAttributes)
+    config, samples, plots, systematics = loadFromYAML(args.yamlFile, histodir=histodir, eras=args.eras)
     import IPython
     IPython.embed()
 
@@ -533,4 +547,4 @@ def plotIt_cli():
         histodir = os.path.dirname(args.yamlFile)
     import logging
     logging.basicConfig(level=(logging.DEBUG if args.verbose else logging.INFO))
-    plotItFromYAML(args.yamlFile, histodir=histodir, outdir=args.outdir, eras=args.eras, vetoFileAttributes=args.vetoFileAttributes, backend=args.backend)
+    plotItFromYAML(args.yamlFile, histodir=histodir, outdir=args.outdir, eras=args.eras, backend=args.backend)

@@ -115,22 +115,23 @@ class PlotStyle(BaseYAMLObject):
 
 
 class Group(PlotStyle):
-    required_attributes = tuple(list(PlotStyle.required_attributes)+["files"])
+    required_attributes = tuple(list(PlotStyle.required_attributes)+["name", "files"])
     optional_attributes = mergeDicts(PlotStyle.optional_attributes, {
               "order"            : None
             })
-    def __init__(self, files, **kwargs):
+    def __init__(self, name, files, **kwargs):
+        kwargs["name"] = name
         kwargs["files"] = files
         if files and ("type" not in kwargs):
             logger.debug("files: {0!r}".format(files))
-            f0type = next(f for f in itervalues(files)).type
-            if not all(f.type == f0type for f in itervalues(files)):
-                logger.warning("Not all the files with group {0} have the same type: {1}".format(kwargs.get("name"), ", ".join("{0}: {1}".format(f.name, f.type) for f in itervalues(files))))
+            f0type = next(f for f in files).type
+            if not all(f.type == f0type for f in files):
+                logger.warning("Not all the files with group {0} have the same type: {1}".format(kwargs.get("name"), ", ".join("{0}: {1}".format(f.name, f.type) for f in files)))
             kwargs["type"] = f0type
         super(Group, self).__init__(**kwargs)
 
 class File(PlotStyle):
-    required_attributes = set(("type",))
+    required_attributes = set(("type", "name"))
     optional_attributes = mergeDicts(PlotStyle.optional_attributes, {
               "pretty-name"      : None
             ##
@@ -148,7 +149,7 @@ class File(PlotStyle):
             , "era"              : None
             })
     def __init__(self, **kwargs):
-        name = kwargs.pop("name")
+        name = kwargs.get("name")
         super(File, self).__init__(**kwargs)
         self.type = self.type.upper()
         if self.pretty_name is None:
@@ -334,6 +335,13 @@ def _load_includes(cfgDict, basePath):
                 _load_includes(v, basePath)
     cfgDict.update(updDict)
 
+def parseWithIncludes(yamlPath):
+    """ Parse a YAML file, with 'includes' relative to its path """
+    cfg = _plotit_loadWrapper(yamlPath)
+    basedir = os.path.dirname(yamlPath)
+    _load_includes(cfg, basedir)
+    return cfg
+
 def parseSystematic(item):
     from .systematics import ShapeSystVar, ConstantSystVar, LogNormalSystVar
     if isinstance(item, str):
@@ -363,30 +371,48 @@ def parseSystematic(item):
     else:
         raise ValueError("Invalid systematics node, must be either a string or a map")
 
-def load(mainPath, vetoFileAttributes=None):
-    if vetoFileAttributes is None:
-        vetoFileAttributes = tuple()
-    ## load config, with includes
-    cfg = _plotit_loadWrapper(mainPath)
-    basedir = os.path.dirname(mainPath)
-    _load_includes(cfg, basedir)
-    configuration = Configuration(**cfg["configuration"])
-    plotDefaults = dict((k,v) for k,v in iteritems(cfg["configuration"]) if k in ("y-axis-format", "show-overflow", "errors-type")) ## TODO may be more?
-    ## files and groups
-    files = dict((name, File(name=name, **dict((ak,av) for ak,av in iteritems(fileCfg) if ak not in vetoFileAttributes)))
-            for name, fileCfg in iteritems(cfg["files"]))
-    groups = dict()
-    for name, groupCfg in iteritems(cfg.get("groups", dict())):
-        groupFiles = dict((fName, f) for fName, f in iteritems(files) if f.group == name)
-        if groupFiles:
-            groups[name] = Group(groupFiles, **groupCfg)
-    plots = dict((k, Plot(name=k, **mergeDicts(plotDefaults, v))) for k, v in iteritems(cfg.get("plots", {})))
-    systematics = [ parseSystematic(item) for item in cfg.get("systematics", []) ]
+## Consistent set of helpers to load config objects from config dictionaries as found in the YAML
+
+def loadPlots(plotsConfig=None, defaultStyle=None):
+    """ Load a list of :py:class:`~plotit.config.Plot` instances from a config dictionary """
+    if plotsConfig is None:
+        return []
+    plotDefaults = dict((attNm, getattr(defaultStyle, attnm)) for attNm,attDef in iteritems(PlotStyle.optional_attributes) if hasattr(defaultStyle, attNm) and getattr(defaultStyle, attNm) != attDef)
+    return [ Plot(name=pName, **mergeDicts(plotDefaults, pConfig)) for pName, pConfig in iteritems(plotsConfig) ]
+
+def loadSystematics(systConfigs=None, configuration=None):
+    """ Load a list of :py:class:`~plotit.systematics.SystVar` instances from config entries"""
+    if systConfigs is None:
+        return []
+    systs = [ parseSystematic(item) for item in systematics ]
     ## lumi systematic
-    if configuration.luminosity_error != 0.:
+    if configuration and configuration.luminosity_error != 0.:
         from .systematics import ConstantSystVar
         lumisyst = ConstantSystVar("lumi", 1.+configuration.luminosity_error, pretty_name="Luminosity")
         logger.debug("Adding luminosity systematic {0!r}".format(lumisyst))
-        systematics.append(lumisyst)
+        systs.append(lumisyst)
+    return systs
 
-    return configuration, files, groups, plots, systematics
+def loadConfiguration(confConfig=None):
+    """ Load a :py:class:`~plotit.config.Configuration` from a dict """
+    if confConfig is None:
+        confConfig = dict()
+    return Configuration(**confConfig)
+
+def loadFiles(fileConfigs=None):
+    """ Load a list of :py:class:`~plotit.config.File` instances from a dictionary with settings """
+    if fileConfigs is None:
+        return []
+    return [ File(name=name, **fileCfg) for name, fileCfg in iteritems(fileConfigs) ]
+
+def loadGroups(groupConfigs=None, files=None, includeEmpty=False):
+    if groupConfigs is None:
+        return []
+    if files is None:
+        files = []
+    groups = []
+    for name, groupCfg in iteritems(groupConfigs):
+        groupFiles = [ f for f in files if f.group ==name ]
+        if includeEmpty or groupFiles:
+            groups.append(Group(name, groupFiles, **groupCfg))
+    return groups
