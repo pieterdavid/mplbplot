@@ -444,13 +444,16 @@ def samplesFromFilesAndGroups(allFiles, groupConfigs, eras=None):
     groups_and_samples = []
     for fl in allFiles:
         if eras is None or fl.cfg.era is None or fl.cfg.era in eras:
-            if fl.cfg.group and fl.cfg.group in groupConfigs:
-                files_by_group[fl.cfg.group].append(fl)
-            else:
-                if fl.cfg.group:
+            if fl.cfg.group:
+                try:
+                    grp = next(g for g in groupConfigs if g.name == fl.cfg.group)
+                    files_by_group[fl.cfg.group].append(fl)
+                except StopIteration:
                     logger.warning("Group {0.cfg.group!r} of sample {0.name!r} not found, adding ungrouped".format(fl))
+                    groups_and_samples.append(fl)
+            else:
                 groups_and_samples.append(fl)
-    groups_and_samples += [ Group(gCfg.name, files_by_group[gNm], gCfg)
+    groups_and_samples += [ Group(gCfg.name, files_by_group[gCfg.name], gCfg)
             for gCfg in groupConfigs if gCfg.name in files_by_group ]
     return sorted(groups_and_samples, key=lambda f : f.cfg.order if f.cfg.order is not None else 0)
 
