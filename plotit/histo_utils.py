@@ -79,10 +79,10 @@ def divide(num, denom):
         cloneHist(num).Divide(num, denom) ## just to force a TH1::CheckConsistency call
     except:
         raise ValueError("Histograms seem to be incompatible")
-    from mplbplot.decorators import bins
+    from mplbplot.decorators import bins ## TODO numpy-vectorize this
     vals = np.array([ ( [ nb.xCenter, nb.content/db.content
-                      , np.sqrt( (nb.lowError**2*db.content**2 + db.lowError*nb.content**2) ) / db.content**2
-                      , np.sqrt( (nb.upError**2 *db.content**2 + db.upError *nb.content**2) ) / db.content**2
+                      , np.sqrt( (nb.lowError**2*db.content**2 + db.lowError**2*nb.content**2) ) / db.content**2
+                      , np.sqrt( (nb.upError**2 *db.content**2 + db.upError**2 *nb.content**2) ) / db.content**2
                       ] if db.content != 0. else [ nb.xCenter, 1., 1., 1. ] )
                       for nb, db in zip(bins(num), bins(denom)) ])
     return vals[:,0], vals[:,1], vals[:,2:].T
