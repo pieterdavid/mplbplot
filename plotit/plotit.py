@@ -533,7 +533,7 @@ def inspectConfig():
         histodir = os.path.dirname(args.yamlFile)
     import logging
     logging.basicConfig(level=(logging.DEBUG if args.verbose else logging.INFO))
-    config, samples, plots, systematics = loadFromYAML(args.yamlFile, histodir=histodir, eras=args.eras)
+    config, samples, plots, systematics, legend = loadFromYAML(args.yamlFile, histodir=histodir, eras=args.eras)
     import IPython
     IPython.embed()
 
