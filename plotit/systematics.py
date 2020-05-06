@@ -64,12 +64,19 @@ class SystVarsForHist(Mapping):
     """ dict-like object to assign as systVars to an entry
 
     (parent is the actual dictionary with SystVars) """
-    __slots__ = ("hist", "parent")
+    __slots__ = ("hist", "parent", "_cached")
     def __init__(self, hist, parent):
         self.hist = hist
         self.parent = parent
+        self._cached = dict()
     def __getitem__(self, ky):
-        return self.parent[ky].forHist(self.hist)
+        if ky in self._cached:
+            return self._cached[ky]
+        else:
+            fp = self.parent[ky].forHist(self.hist)
+            if isinstance(fp, ShapeSystVar.ForHist):
+                self._cached[ky] = fp
+            return fp
     def __iter__(self):
         for systVar in self.parent:
             yield systVar
@@ -152,6 +159,8 @@ class ShapeSystVar(SystVar):
         __slots__ = ("_histUp", "_histDown")
         def __init__(self, hist, systVar):
             super(ShapeSystVar.ForHist, self).__init__(hist, systVar)
+            self._histUp = None
+            self._histDown = None
         @lazyload
         def histUp(self):
             return self._findVarHist("up")
@@ -160,7 +169,7 @@ class ShapeSystVar(SystVar):
             return self._findVarHist("down")
         def _findVarHist(self, vari):
             variHistName = "{0}__{1}{2}".format(self.hist.name, self.systVar.name, vari)
-            if self.hist.tfile.Get(variHistName):
+            if self.hist.tFile.Get(variHistName):
                 return self.hist.clone(name=variHistName)
             else: ## try to find the file
                 import os.path

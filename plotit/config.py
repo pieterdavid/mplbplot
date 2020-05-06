@@ -384,7 +384,7 @@ def loadSystematics(systConfigs=None, configuration=None):
     """ Load a list of :py:class:`~plotit.systematics.SystVar` instances from config entries"""
     if systConfigs is None:
         return []
-    systs = [ parseSystematic(item) for item in systematics ]
+    systs = [ parseSystematic(item) for item in systConfigs ]
     ## lumi systematic
     if configuration and configuration.luminosity_error != 0.:
         from .systematics import ConstantSystVar

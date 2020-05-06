@@ -26,7 +26,8 @@ class lazyload(object):
     and clean up the objects).
 
     If the host class uses __slots__, the appropriate attribute
-    must be defined there (name prefix with an underscore).
+    must be defined there (name prefix with an underscore), and
+    initialized (usually to ``None``) in the constructor.
     """
     __slots__ = ("load", "_cName")
     def __init__(self, load):
@@ -66,7 +67,7 @@ class File(object):
         return tf
     def getHist(self, plot, name=None):
         """ Get the histogram for the combination of ``plot`` and this file/sample """
-        hk = FileHist(histoFile=self, plot=plot, name=name)
+        hk = FileHist(hFile=self, plot=plot, name=name)
         from .systematics import SystVarsForHist
         hk.systVars = SystVarsForHist(hk, self.systematics)
         return hk
@@ -122,31 +123,31 @@ class FileHist(object):
     and :py:class:`~plotit.config.Plot` are held.
     """
     __slots__ = ("_obj", "name", "_tFile", "plot", "hFile", "systVars")
-    def __init__(self, name=None, tFile=None, plot=None, histoFile=None, systVars=None):
+    def __init__(self, name=None, tFile=None, plot=None, hFile=None, systVars=None):
         """ Histogram key constructor. The object is read on first use, and cached.
 
         :param name:        name of the histogram inside the file (taken from ``plot`` if not specified)
-        :param tFile:       ROOT file with histograms (taken from ``histoFile`` if not specified)
+        :param tFile:       ROOT file with histograms (taken from ``hFile`` if not specified)
         :param plot:        :py:class:`~plotit.config.Plot` configuration
-        :param histoFile:   :py:class:`plotit.plotit.File` instance corresponding to the sample
+        :param hFile:   :py:class:`plotit.plotit.File` instance corresponding to the sample
         """
         self._obj = None
         self.name = name if name else plot.name
         self._tFile = tFile ## can be explicitly passed, or None (taken from hFile on first use then)
         self.plot = plot
-        self.hFile = histoFile
+        self.hFile = hFile
         self.systVars = systVars
     @lazyload
     def tFile(self): ## only called if not constructed explicitly
         return self.hFile.tFile
     def __str__(self):
         return 'FileHist("{0}", "{1}")'.format(self.tFile.GetName(), self.name)
-    def clone(self, name=None, tFile=None, plot=None, histoFile=None, systVars=None):
+    def clone(self, name=None, tFile=None, plot=None, hFile=None, systVars=None):
         """ Modifying clone method. `systVars` is *not* included by default """
         return FileHist(name=(name if name is not None else self.name),
-                        tFile=(tFile if tfile is not None else self.tFile),
+                        tFile=(tFile if tFile is not None else self.tFile),
                         plot=(plot if plot is not None else self.plot),
-                        histoFile=(histoFile if histoFile is not None else self.histoFile),
+                        hFile=(hFile if hFile is not None else self.hFile),
                         systVars=systVars)
     @lazyload
     def obj(self):
