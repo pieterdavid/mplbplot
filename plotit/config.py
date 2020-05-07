@@ -20,16 +20,16 @@ class BaseYAMLObject(object):
     @staticmethod
     def _normalizeAttr(att):
         return att.replace("-", "_")
-    @staticmethod
-    def _normalizeKeys(aDict):
-        return dict((BaseYAMLObject._normalizeAttr(k), v) for k, v in iteritems(aDict))
     def __init__(self, **kwargs):
         if not all( nm in kwargs for nm in self.__class__.required_attributes ):
             raise KeyError("Attribute(s) {1} required for class {0} but not found (full dictionary: {2})".format(self.__class__.__name__, ", ".join("'{}'".format(k) for k in self.__class__.required_attributes if k not in kwargs), str(kwargs)))
-        if not all( k in self.__class__.required_attributes or k in self.__class__.optional_attributes for k in kwargs ):
-            raise KeyError("Unknown attribute(s) for class {0}: {1} (all attributes: {2})".format(self.__class__.__name__, ", ".join("'{}'".format(k) for k in kwargs if k not in self.__class__.required_attributes and k not in self.__class__.optional_attributes), str(kwargs)))
-        self.__dict__.update(BaseYAMLObject._normalizeKeys(self.__class__.optional_attributes))
-        self.__dict__.update(BaseYAMLObject._normalizeKeys(kwargs))
+        for nm in self.__class__.required_attributes:
+            if nm not in kwargs:
+                raise KeyError("Attribute {0} is required for class {2} but not found (full dictionary: {2!r})".format(nm, self.__class__.__name__, kwargs))
+            self.__dict__[nm] = kwargs[nm]
+        for nm,defVal in iteritems(self.__class__.optional_attributes):
+            norm_name = BaseYAMLObject._normalizeAttr(nm)
+            self.__dict__[norm_name] = kwargs.get(nm, defVal)
     def __repr__(self):
         return "{0}({1})".format(self.__class__.__name__, ", ".join("{0}={1!r}".format(k,getattr(self, BaseYAMLObject._normalizeAttr(k))) for k in chain(self.__class__.required_attributes, (dk for dk,dv in iteritems(self.__class__.optional_attributes) if dv is not getattr(self, BaseYAMLObject._normalizeAttr(dk))))))
 
