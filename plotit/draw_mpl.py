@@ -21,7 +21,7 @@ def drawStackRatioPlot(plot, expStack, obsStack, sigStacks=None, config=None, ou
     theplot.draw()
     #
     if plot.x_axis_range:
-        theplot.ax.set_xlim(*plot.x_axis_range)
+        theplot.ax.set_xlim(*plot.x_axis_range) ## TODO round up to bin boundary
     if plot.x_axis:
         theplot.rax.set_xlabel(plot.x_axis)
     #
@@ -84,21 +84,22 @@ class StackRatioPlot(object):
             ax = self.ax
 
         ## expected
-        exp_hists, exp_colors = zip(*((eh.obj, eh.getStyleOpt("fill_color")) for eh in self.expected.entries))
+        exp_hists, exp_colors = zip(*((eh.obj, eh.getStyleOpt("fill_color")) for eh in reversed(self.expected.entries)))
         ax.rhist(exp_hists, histtype="stepfilled", color=exp_colors, stacked=True)
         exp_statsyst = self.expected.getStatSystHisto()
         ax.rerrorbar(exp_statsyst, kind="box", hatch=8*"/", ec="none", fc="none")
         ## observed
-        ax.rerrorbar(self.observed.total, kind="bar", fmt="ko")
+        ax.rerrorbar(self.observed.obj, kind="bar", fmt="ko", xErrors=False)
 
     def drawRatio(self, ax=None):
         if ax is None:
             ax = self.rax
 
-        ax.axhline(1., color="k") ## should be made optional, and take options for style (or use the grid settings)
+        #ax.axhline(1., color="k") ## should be made optional, and take options for style (or use the grid settings)
+        ax.grid(which="major", axis="y", linestyle="--", color="k", linewidth=.5)
 
-        rx,ry,ryerr = h1u.divide(self.observed.total, self.expected.total)
-        ax.errorbar(rx, ry, yerr=ryerr, fmt="ko")
+        rx,ry,ryerr = h1u.divide(self.observed.obj, self.expected.obj)
+        ax.errorbar(rx, ry, yerr=ryerr, fmt="ko", capsize=1.5)
 
         ## then systematics...
         exp_syst_rel = self.expected.getRelSystematicHisto()
