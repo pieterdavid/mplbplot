@@ -145,10 +145,8 @@ class LogNormalSystVar(ParameterizedSystVar):
         super(LogNormalSystVar, self).__init__(name, pretty_name=pretty_name, on=on)
     ## TODO __repr__
 
-    @property
     def up(self, hist):
         return hist.contents*self.value_up
-    @property
     def down(self, hist):
         return hist.contents*self.value_down
 
