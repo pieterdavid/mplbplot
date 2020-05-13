@@ -1,13 +1,14 @@
 """
 Utility functions to manipulate ROOT histograms (for overflow display and systematics)
 """
-__all__ = ("cloneHist", "addOverflow",
-           "histoWithErrors", "histoWithErrorsQuadAdded", "histoDivByValues",
-           "divide")
+__all__ = ("cloneHist", "addOverflow", "divide")
 
 from builtins import zip, range
 from itertools import count, chain
+import math
 import numpy as np
+
+from . import logger
 
 from cppyy import gbl
 gbl.TH1.AddDirectory(False)
@@ -17,57 +18,60 @@ def cloneHist(hist, newName=None):
         raise AssertionError("Cannot clone histograms as free objects when TH1::AddDirectoryStatus is True")
     return ( hist.Clone(newName) if newName else hist.Clone() )
 
-def sumBinRange(hist, binRange):
-    """ Sum bin contents over the bin range """
-    return sum( hist.GetBinContent(i) for i in binRange )
-def sumW2BinRange(hist, binRange):
-    """ Sum bin w2 over the bin range """
-    sumw2 = hist.GetSumw2()
-    if sumw2.GetSize() == 0:
-        raise AssertionError("Asked for sumw2 for a histogram that doesn't have weights")
-    return sum( sumw2.At(i) for i in binRange )
+def hasSumw2(hist):
+    return hist.GetSumw2() and hist.GetSumw2N()
 
 def addOverflow(hist, edgeBin, isLower):
     """ Add contents of bins outside range (below or above edgeBin, depending on isLower) to edgeBin """
     if isLower:
-        rng_out = range(0, edgeBin)
+        rng = slice(0, edgeBin+1)
+        rng_out = range(rng.start, edgeBin)
     else:
-        rng_out = range(edgeBin+1, hist.GetNbinsX()+2)
-    rng_inc = chain((edgeBin,), iter(rng_out))
-    hasSumw2 = ( hist.GetSumw2N() != 0 )
-    hist.SetBinContent(edgeBin, sumBinRange(hist, iter(rng_inc)))
-    if hasSumw2:
-        hist.SetBinError(edgeBin, np.sqrt(sumW2BinRange(hist, iter(rng_inc))))
+        rng = slice(edgeBin, hist.GetNbinsX()+2)
+        rng_out = range(edgeBin+1, rng.stop)
+    contSum = np.sum(tarr_asnumpy(hist)[rng])
+    hist.SetBinContent(edgeBin, contSum)
     for ib in iter(rng_out):
         hist.SetBinContent(ib, 0)
-        if hasSumw2:
-            hist.SetBinError(ib, 0.)
+    if hasSumw2(hist):
+        errSum = np.sum(tarr_asnumpy(hist.GetSumw2())[rng])
+        hist.SetBinError(edgeBin, math.sqrt(errSum))
+        for ib in iter(rng_out):
+            if ib != edgeBin:
+                hist.SetBinError(ib, 0.)
 
-def histoWithErrors(hist, newErrors):
-    """ make a histogram with bin errors set to the given values """
-    newHist = cloneHist(hist)
-    for i,ierr in zip(count(1), newErrors):
-        newHist.SetBinError(i, ierr)
+def tarr_asnumpy(tarr, shape=None):
+    llv = tarr.GetArray()
+    arr = np.frombuffer(llv, dtype=llv.typecode, count=tarr.GetSize())
+    if shape is not None:
+        return np.reshape(arr, shape)
+    else:
+        return arr
+
+def getShape(hist):
+    shape = tuple(getattr(hist, "GetNbins{0}".format(ax))()+2 for __,ax in zip(range(hist.GetDimension()), "XYZ"))
+    prod = 1
+    for dimn in shape:
+        prod *= dimn
+    assert prod == hist.GetSize()
+    return shape
+
+def h1With(hist, values=None, errors2=None):
+    # To replace the above, new convention: under- and overflow bin are included (ROOT numbering)
+    if values is None and errors2 is None:
+        return hist
+    else:
+        newHist = cloneHist(hist)
+        if errors2 is not None and not hasSumw2(newHist):
+            newHist.Sumw2()
+        for i in range(0, hist.GetNbinsX()+2):
+            if values is not None:
+                newHist.SetBinContent(i, values[i])
+            if errors2 is not None:
+                #newHist.GetSumw2()[i] = errors2[i]
+                newHist.SetBinError(i, np.sqrt(errors2[i]))
+                ###newHist.SetBinError(i, errors2[i])
     return newHist
-
-def histoWithErrorsQuadAdded(hist, newErrors):
-    """ make a histogram with given values added in quadrature to the existing bin errors """
-    newHist = cloneHist(hist)
-    for i,ierr in zip(count(1), newErrors):
-        newHist.SetBinError(i, np.sqrt(hist.GetBinError(i)**2 + ierr**2))
-    return newHist
-
-def histoDivByValues(absHisto):
-    """ make a histogram with values 1 and errors err/val """
-    relHisto = cloneHist(absHisto)
-    from mplbplot.decorators import bins
-    for i,b in zip(count(1), bins(absHisto)):
-        relHisto.SetBinContent(i, 1.)
-        if b.content != 0.:
-            relHisto.SetBinError(i, b.error/b.content)
-        else:
-            relHisto.SetBinError(i, 1.)
-    return relHisto
 
 def divide(num, denom):
     """ get the ratio between expected and observed

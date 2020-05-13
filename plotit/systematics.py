@@ -45,16 +45,18 @@ class SystVar(object):
         def __init__(self, hist, systVar):
             self.hist = hist
             self.systVar = systVar
-        ## TODO optimisation: return the list(s) of deviations in one call
-        def nom(self, i):
-            """ Nominal value for bin i """
-            pass
-        def up(self, i):
-            """ Up variation for bin i """
-            pass
-        def down(self, i):
-            """ Down variation for bin i """
-            pass
+        @property
+        def nom(self):
+            """ Nominal values """
+            return self.hist.contents
+        @property
+        def up(self):
+            """ Up variation values """
+            return self.hist.contents
+        @property
+        def down(self):
+            """ Down variation values """
+            return self.hist.contents
 
 try: ## python3 (avoid warning)
     from collections.abc import Mapping
@@ -87,11 +89,11 @@ class ParameterizedSystVar(SystVar):
     """ base for constant etc. """
     def __init__(self, name, pretty_name=None, on=SystVar.default_filter):
         super(ParameterizedSystVar, self).__init__(name, pretty_name=pretty_name, on=on)
-    def nom(self, hist, i):
+    def nom(self, hist):
+        return hist.contents
+    def up(self, hist):
         pass
-    def up(self, hist, i):
-        pass
-    def down(self, hist, i):
+    def down(self, hist):
         pass
 
     class ForHist(SystVar.ForHist):
@@ -99,12 +101,15 @@ class ParameterizedSystVar(SystVar):
         __slots__ = tuple()
         def __init__(self, hist, systVar):
             super(ParameterizedSystVar.ForHist, self).__init__(hist, systVar)
-        def nom(self, i):
-            return self.systVar.nom(self.hist.obj, i)
-        def up(self, i):
-            return self.systVar.up(self.hist.obj, i)
-        def down(self, i):
-            return self.systVar.down(self.hist.obj, i)
+        @property
+        def nom(self):
+            return self.systVar.nom(self.hist)
+        @property
+        def up(self):
+            return self.systVar.up(self.hist)
+        @property
+        def down(self):
+            return self.systVar.down(self.hist)
 
 class ConstantSystVar(ParameterizedSystVar):
     """ constant scale up/down (given as the relative up variation, e.g. 1.2 for 20%) """
@@ -114,12 +119,10 @@ class ConstantSystVar(ParameterizedSystVar):
     def _repr_args(self):
         return (self.name, self.value)
 
-    def nom(self, hist, i):
-        return hist.GetBinContent(i)
-    def up(self, hist, i):
-        return self.nom(hist, i)*self.value
-    def down(self, hist, i):
-        return self.nom(hist, i)*(2-self.value)
+    def up(self, hist):
+        return hist.contents*self.value
+    def down(self, hist):
+        return hist.contents*(2-self.value)
 
 class LogNormalSystVar(ParameterizedSystVar):
     """ """
@@ -142,12 +145,12 @@ class LogNormalSystVar(ParameterizedSystVar):
         super(LogNormalSystVar, self).__init__(name, pretty_name=pretty_name, on=on)
     ## TODO __repr__
 
-    def nom(self, hist, i):
-        return hist.GetBinContent(i)
-    def up(self, hist, i):
-        return self.nom(hist, i)*self.value_up
-    def down(self, hist, i):
-        return self.nom(hist, i)*self.value_down
+    @property
+    def up(self, hist):
+        return hist.contents*self.value_up
+    @property
+    def down(self, hist):
+        return hist.contents*self.value_down
 
 class ShapeSystVar(SystVar):
     """ for shapes """
@@ -191,9 +194,9 @@ class ShapeSystVar(SystVar):
                     #raise IOError("Path '{}' does not exist".format(variPath))
                 #print("Warning: could not find variation hist of {0} for {1}, assuming no variation then".format(self.hist, self.systVar.name))
                 return self.hist
-        def nom(self, i):
-            return self.hist.obj.GetBinContent(i)
-        def up(self, i):
-            return self.histUp.obj.GetBinContent(i)
-        def down(self, i):
-            return self.histDown.obj.GetBinContent(i)
+        @property
+        def up(self):
+            return self.histUp.contents
+        @property
+        def down(self):
+            return self.histDown.contents

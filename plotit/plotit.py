@@ -16,7 +16,7 @@ import numpy as np
 from . import histo_utils as h1u
 from . import logger
 
-class lazyload(object):
+class lazyload(property):
     """
     Python2 equivalent of a read-only functools.cached_property
 
@@ -29,14 +29,14 @@ class lazyload(object):
     must be defined there (name prefix with an underscore), and
     initialized (usually to ``None``) in the constructor.
     """
-    __slots__ = ("load", "_cName")
-    def __init__(self, load):
-        self.load = load
-        self._cName = "_{0}".format(load.__name__)
+    __slots__ = ("_cName",)
+    def __init__(self, fget=None):
+        super(lazyload, self).__init__(fget=fget, doc=property.__doc__)
+        self._cName = "_{0}".format(fget.__name__)
     def __get__(self, instance, cls):
         value = getattr(instance, self._cName)
         if value is None:
-            value = self.load(instance)
+            value = self.fget(instance)
             setattr(instance, self._cName, value)
         return value
 
@@ -104,16 +104,48 @@ class Group(object):
     def __repr__(self):
         return "Group({0.name!r}, {0.files!r})".format(self)
 
-class MemHist(object):
+class BaseHist(object):
+    __slots__ = ("_obj", "_shape")
+    def __init__(self):
+        self._obj = None
+        self._shape = None
+    def nBins(self, axis):
+        """ Number of (non-overflow) bins for an axis """
+        return self.shape[axis]-2
+    @property ## in fact this one can *always* be lazily loaded
+    def obj(self):
+        """ Default implementation: return cached value """
+        return self._obj
+    @property
+    def shape(self):
+        return self._shape
+    @property
+    def contents(self):
+        """ Default implementation: view of the array in obj """
+        return h1u.tarr_asnumpy(self.obj, shape=self.shape)
+    @property
+    def sumw2(self):
+        """ Default implementation: view of the array in obj """
+        if h1u.hasSumw2(self.obj):
+            return h1u.tarr_asnumpy(self.obj.GetSumw2(), shape=self.shape)
+        else:
+            return self.contents
+    def contributions(self):
+        """ Default: just self """
+        yield self
+    def getCombinedSyst2(self, systematics): ## TODO move to BaseHist
+        """ Calculate the combined systematic uncertainty on the sum """
+        return getCombinedSyst2(list(self.contributions()), systematics)
+    ## TODO access axes / binnings
+    ## TODO getStyleOpt?
+
+class MemHist(BaseHist):
     """ In-memory histogram, minimally compatible with :py:class:`~plotit.plotit.FileHist` """
     def __init__(self, obj):
-        self.obj = obj # the underlying object
-    def contributions(self):
-        yield self
-    def __repr__(self):
-        return "MemHist({0.obj!r})".format(self)
+        self._obj = obj
+        self._shape = h1u.getShape(obj)
 
-class FileHist(object):
+class FileHist(BaseHist):
     """
     Histogram from a file, or distribution for one sample.
 
@@ -122,7 +154,7 @@ class FileHist(object):
     In addition, references to the sample :py:class:`~plotit.plotit.File`
     and :py:class:`~plotit.config.Plot` are held.
     """
-    __slots__ = ("_obj", "name", "_tFile", "plot", "hFile", "systVars")
+    __slots__ = ("name", "_tFile", "plot", "hFile", "systVars")
     def __init__(self, name=None, tFile=None, plot=None, hFile=None, systVars=None):
         """ Histogram key constructor. The object is read on first use, and cached.
 
@@ -131,13 +163,13 @@ class FileHist(object):
         :param plot:        :py:class:`~plotit.config.Plot` configuration
         :param hFile:   :py:class:`plotit.plotit.File` instance corresponding to the sample
         """
-        self._obj = None
+        super(FileHist, self).__init__()
         self.name = name if name else plot.name
         self._tFile = tFile ## can be explicitly passed, or None (taken from hFile on first use then)
         self.plot = plot
         self.hFile = hFile
         self.systVars = systVars
-    @lazyload
+    @property
     def tFile(self): ## only called if not constructed explicitly
         return self.hFile.tFile
     def __str__(self):
@@ -166,41 +198,60 @@ class FileHist(object):
             res = h1u.cloneHist(res)
             if xOverflowRange is not None:
                 res.GetXaxis().SetRangeUser(xOverflowRange[0], xOverflowRange[1])
-                from .histo_utils import addOverflow
-                addOverflow(res, res.GetXaxis().GetFirst(), True )
-                addOverflow(res, res.GetXaxis().GetLast() , False)
+                h1u.addOverflow(res, res.GetXaxis().GetFirst(), True )
+                h1u.addOverflow(res, res.GetXaxis().GetLast() , False)
             if scale != 1.:
-                if not res.GetSumw2():
-                    res.Sumw2()
+                if not h1u.hasSumw2(res):
+                    res.Sumw2() ## NOTE should be automatic
                 res.Scale(scale)
             if rebin != 1:
                 res.Rebin(rebin)
-        ##
+            ## NOTE If scale/rebin are done in numpy (or later, when drawing), the copy of the histogram may be avoided
+        self._shape = h1u.getShape(res) ## TODO take overflow into account ?
         return res
+    @property
+    def shape(self):
+        self.obj ## load if needed
+        return self._shape
     def getStyleOpt(self, name):
         return getattr(self.hFile.cfg, name)
-    def contributions(self):
-        yield self
     def __repr__(self):
         return "FileHist({0.name!r}, {0.hFile!r})".format(self)
 
-class GroupHist(object):
+class SumHist(BaseHist):
     """
-    Combined histogram for a group of samples.
-
-    The public interface is almost identical to :py:class:`~plotit.plotit.FileHist`
+    Histogram that is the sum of other histograms (used for stack total, base of GroupHist)
     """
-    __slots__ = ("_obj", "entries", "group")
-    def __init__(self, group, entries):
-        """ Constructor
-
-        :param group: :py:class:`~plotit.plotit.Group` instance
-        :param entries: a :py:lass:`~plotit.plotit.FileHist` for each sample in the group
-        """
-        self._obj = None
-        self.group = group
-        self.entries = entries
-        ## TODO is self.plot needed? explicitly or as property
+    __slots__ = ("entries", "_contents", "_sumw2", "_syst2")
+    def __init__(self, entries=None):
+        super(SumHist, self).__init__()
+        self.entries = []
+        self._contents = None
+        self._sumw2 = None
+        self._syst2 = None
+        if entries:
+            for entry in entries:
+                self.add(entry, clearTotal=False)
+    def add(self, entry, clearTotal=True):
+        """ Add an entry to the sum (clearing the total, if already built) """
+        ## TODO some kind of axis compatibility test (delayed, then, in contributions() or its users)
+        self.entries.append(entry)
+        if clearTotal:
+            self.total.clear()
+    def clear(self):
+        if self._contents is not None:
+            self._contents = None
+        if self._sumw2 is not None:
+            self._sumw2 = None
+        if self._syst2 is not None:
+            self._syst2 = None
+        if self._obj is not None:
+            self._obj = None
+    @property
+    def shape(self):
+        if not self._shape: ## retrieve (and possibly load) if needed
+            self._shape = self.entries[0].shape
+        return self._shape
     @lazyload
     def obj(self):
         """ the underlying TH1 object """
@@ -208,13 +259,58 @@ class GroupHist(object):
         for entry in islice(self.entries, 1, None):
             res.Add(entry.obj)
         return res
+    def contributions(self):
+        for entry in self.entries:
+            for contrib in entry.contributions():
+                yield contrib
+    @lazyload
+    def contents(self):
+        return sum(contrib.contents for contrib in self.contributions())
+    @lazyload
+    def sumw2(self):
+        return sum(contrib.sumw2 for contrib in self.contributions())
+    @lazyload
+    def syst2(self):
+        return self.getCombinedSyst2(set(chain.from_iterable(contrib.systVars for contrib in self.contributions())))
+
+class GroupHist(SumHist):
+    """
+    Combined histogram for a group of samples (SumHist with a config)
+    """
+    __slots__ = ("group",)
+    def __init__(self, group, entries):
+        """ Constructor
+
+        :param group: :py:class:`~plotit.plotit.Group` instance
+        :param entries: a :py:lass:`~plotit.plotit.FileHist` for each sample in the group
+        """
+        super(GroupHist, self).__init__(entries)
+        self.group = group
+        ## TODO is self.plot needed? explicitly or as property
     def getStyleOpt(self, name):
         return getattr(self.group.cfg, name)
-    def contributions(self):
-        for contrib in self.entries:
-            yield contrib
 
-class Stack(object):
+def getCombinedSyst2(contributions, systematics):
+    """ Get the combined systematic uncertainty
+
+    :param contributions: contributions (FileHist) to group over
+    :param systematics:  systematic variations to consider (if None, all that are present are used for each histogram)
+    """
+    if not hasattr(contributions, "__iter__"):
+        contributions = [ contributions ]
+    shape = contributions[0].shape
+    assert all(cb.shape == shape for cb in contributions)
+    syst2 = np.zeros(shape)
+    for syst in systematics:
+        systInBins = np.zeros(shape)
+        for contrib in contributions:
+            svh = contrib.systVars.get(syst)
+            if svh:
+                systInBins += np.maximum(np.abs(svh.up-svh.nom), np.abs(svh.nom-svh.down))
+        syst2 += systInBins**2
+    return syst2
+
+class Stack(SumHist):
     """
     Stack of distribution contributions from different samples.
 
@@ -225,86 +321,24 @@ class Stack(object):
     systematic uncertainty on the total, combined with the statistical uncertainty
     or not, are provided.
     """
-    __slots__ = ("entries", "_total", "_totalSystematics")
+    __slots__ = tuple()
     def __init__(self, entries=None):
-        self.entries = list(entries) if entries is not None else list()
-        self._total = None
-        self._totalSystematics = None
-    def add(self, hist):
-        """ Add a histogram to a stack """
-        if self._total:
-            raise RuntimeError("Stack has been built, no more entries should be added")
-        self.entries.append(hist)
-    def contributions(self):
-        """ Iterate over contributions (histograms inside all entries) - for systematics calculation etc. """
-        for entry in self.entries:
-            for contrib in entry.contributions():
-                yield contrib
-    @lazyload
-    def total(self):
-        """ upper stack histogram """
-        if not self.entries:
-            raise RuntimeError("Cannot construct a stack without histogram entries")
-        hSt = h1u.cloneHist(self.entries[0].obj)
-        for nh in islice(self.entries, 1, None):
-            hSt.Add(nh.obj)
-        return hSt
-    def allSystVarNames(self):
-        """ Get the list of all systematics affecting the sum histogram """
-        return set(chain.from_iterable(contrib.systVars for contrib in self.contributions()))
-    def calcSystematics(self, systVarNames=None):
-        """ Get the combined systematic uncertainty
+        super(Stack, self).__init__(entries=entries)
 
-        :param systVarNames:    systematic variations to consider (if None, all that are present are used for each histogram)
-        """
-        nBins = self.total.GetNbinsX()
-        binRange = range(1,nBins+1) ## no overflow or underflow
-
-        if systVarNames is None:
-            systVarNames = self.allSystVarNames()
-
-        ## TODO possible optimisations
-        ## - build up the sum piece by piece (no dict then)
-        ## - make entries the outer loop
-        ## - calculate a systematic on the total if it applies to all entries and is parameterized
-        systPerBin = dict((vn, np.zeros((nBins,))) for vn in systVarNames) ## including overflows
-        maxVarPerBin = np.zeros((nBins,)) ## helper object - reduce allocations
-        systInteg = 0. ## TODO FIXME
-        for systN, systInBins in iteritems(systPerBin):
-            for contrib in self.contributions():
-                syst = contrib.systVars.get(systN)
-                if syst is not None:
-                    for i in iter(binRange):
-                        maxVarPerBin[i-1] = max(abs(syst.up(i)-syst.nom(i)), abs(syst.down(i)-syst.nom(i)))
-                    systInBins += maxVarPerBin
-                    systInteg += np.sum(maxVarPerBin)
-
-        totalSystInBins = np.sqrt(sum( binSysts**2 for binSysts in itervalues(systPerBin) ))
-        if len(systPerBin) == 0: ## no-syst case
-            totalSystInBins = np.zeros((nBins,))
-
-        return systInteg, totalSystInBins
-    @lazyload
-    def totalSystematics(self):
-        """ (integral-total-systematic, array-of-bin-total-systematic-uncertainties) """
-        return self.calcSystematics(systVarNames=None)
-    def getTotalSystematics(self, systVarNames=None):
-        if systVarNames is None:
-            return self.totalSystematics
-        else:
-            return self.getTotalSystematics(systVarNames=systVarNames)
-    def getSystematicHisto(self, systVarNames=None):
+    ## TODO absorbe in the draw backends, simple enough now
+    def getSystematicHisto(self):
         """ construct a histogram of the stack total, with only systematic uncertainties """
-        __, totalSystInBins = self.getTotalSystematics(systVarNames=systVarNames)
-        return h1u.histoWithErrors(self.total, totalSystInBins)
-    def getStatSystHisto(self, systVarNames=None):
+        return h1u.h1With(self.obj, errors2=self.syst2)
+    def getStatSystHisto(self):
         """ construct a histogram of the stack total, with statistical+systematic uncertainties """
-        __, totalSystInBins = self.getTotalSystematics(systVarNames=systVarNames)
-        return h1u.histoWithErrorsQuadAdded(self.total, totalSystInBins)
-    def getRelSystematicHisto(self, systVarNames=None):
+        return h1u.h1With(self.obj, errors2=(self.sumw2 + self.syst2))
+    def getRelSystematicHisto(self):
         """ construct a histogram of the relative systematic uncertainties for the stack total """
-        return h1u.histoDivByValues(self.getSystematicHisto(systVarNames))
+        ##relSyst2 = self.syst2 / h1u.tarr_asnumpy(self.total)**2
+        return h1u.h1With(self.obj, values=np.ones(self.shape),
+                    errors2=self.syst2/self.contents**2)
 
+    ## TODO check if this still makes sense / is needed
     @staticmethod
     def merge(*stacks):
         """ Merge two or more stacks """
