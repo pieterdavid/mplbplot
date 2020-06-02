@@ -164,15 +164,15 @@ class File(PlotStyle):
 
 class Point(BaseYAMLObject):
     required_attributes = set(("x", "y"))
-    def __init__(self, **kwargs):
-        super(Point, self).__init__(**kwargs)
+    def __init__(self, x, y, **kwargs):
+        super(Point, self).__init__(x=x, y=y, **kwargs)
 
 class Label(BaseYAMLObject):
     required_attributes = set(("text", "position"))
     optional_attributes = { "size" : 18 }
     def __init__(self, **kwargs):
         super(Label, self).__init__(**kwargs)
-        self.position = Point(self.position)
+        self.position = Point(*self.position)
 
 class Plot(BaseYAMLObject):
     required_attributes = set(("name",))
@@ -243,7 +243,7 @@ class Plot(BaseYAMLObject):
         #    except Exception, e:
         #        raise ValueError("Could not parse x-axis-range {0}: {1}".format(self.x_axis_range, e))
         #    self.x_axis_range = lims
-        self.labels = [ Label(lblNd) for lblNd in self.labels ]
+        self.labels = [ Label(**lblNd) for lblNd in self.labels ]
 
 class Configuration(BaseYAMLObject):
     optional_attributes = {
@@ -348,7 +348,7 @@ def parseSystematic(item):
         return ShapeSystVar(item)
     elif isinstance(item, dict):
         if len(item) == 1:
-            name, val = next(iteritems(item))
+            name, val = next(itm for itm in iteritems(item))
             if isinstance(val, float):
                 return ConstantSystVar(name, val)
             elif isinstance(val, dict):
