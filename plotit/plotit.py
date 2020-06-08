@@ -529,13 +529,13 @@ def loadFromYAML(yamlFileName, histodir=".", eras=None):
     from .config import parseWithIncludes
     yCfg = parseWithIncludes(yamlFileName)
     ## create config objects from YAML dictionary
-    from .config import loadConfiguration, loadFiles, loadGroups, loadPlots, loadSystematics
+    from .config import loadConfiguration, loadFiles, loadGroups, loadPlots, loadSystematics, loadLegend
     config = loadConfiguration(yCfg.get("configuration"))
     cFiles = loadFiles(yCfg.get("files"))
     cGroups = loadGroups(yCfg.get("groups"), files=cFiles)
     plots = loadPlots(yCfg.get("plots"), defaultStyle=config)
     systematics = loadSystematics(yCfg.get("systematics"), configuration=config)
-    legend = None ## TODO add legend class & parsing
+    legend = loadLegend(yCfg.get("legend"))
     ## resolve, select, and sort files and groups into samples
     files = resolveFiles(cFiles, config, systematics=systematics, histodir=histodir)
     samples = samplesFromFilesAndGroups(files, cGroups, eras=(eras if eras is not None else config.eras))

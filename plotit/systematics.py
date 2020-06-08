@@ -174,7 +174,7 @@ class ShapeSystVar(SystVar):
                 return self.hist.clone(name=variHistName)
             else: ## try to find the file
                 import os.path
-                fullpath = self.hist.tfile.GetPath().split(":")[0]
+                fullpath = self.hist.tFile.GetPath().split(":")[0]
                 variPath = os.path.join(os.path.dirname(fullpath), "{0}__{1}{2}.root".format(os.path.splitext(os.path.basename(fullpath))[0], self.systVar.name, vari))
                 if os.path.exists(variPath):
                     from cppyy import gbl

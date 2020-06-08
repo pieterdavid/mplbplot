@@ -113,7 +113,6 @@ class PlotStyle(BaseYAMLObject):
         a = int(color[7:9], base=16)/255. if len(color) > 7 else 1.
         return (r,g,b,a)
 
-
 class Group(PlotStyle):
     required_attributes = tuple(list(PlotStyle.required_attributes)+["name", "files"])
     optional_attributes = mergeDicts(PlotStyle.optional_attributes, {
@@ -244,6 +243,33 @@ class Plot(BaseYAMLObject):
         #        raise ValueError("Could not parse x-axis-range {0}: {1}".format(self.x_axis_range, e))
         #    self.x_axis_range = lims
         self.labels = [ Label(**lblNd) for lblNd in self.labels ]
+
+class Position(BaseYAMLObject):
+    required_attributes = set(("x1", "y1", "x2", "y2"))
+    def __init__(self, x1, y1, x2, y2, **kwargs):
+        super(Position, self).__init__(x1=x1, y1=y1, x2=x2, y2=y2, **kwargs)
+
+class Legend(BaseYAMLObject):
+    required_attributes = tuple()
+    optional_attributes = {
+            "position" : Position(0.6, 0.6, 0.9, 0.9),
+            "columns" : 1,
+            "entries" : []
+            }
+    def __init__(self, **kwargs):
+        super(Legend, self).__init__(**kwargs)
+        if self.position is not None:
+            self.position = Position(*self.position)
+        self.entries = [ Legend.Entry(**entryNd) for entryNd in self.entries ]
+
+    class Entry(BaseYAMLObject):
+        required_attributes = ("label",)
+        optional_attributes = {
+                "type": "MC",
+                "order": 0
+                }
+        def __init__(self, **kwargs):
+            super(Legend.Entry, self).__init__(**kwargs)
 
 class Configuration(BaseYAMLObject):
     optional_attributes = {
@@ -416,3 +442,8 @@ def loadGroups(groupConfigs=None, files=None, includeEmpty=False):
         if includeEmpty or groupFiles:
             groups.append(Group(name, groupFiles, **groupCfg))
     return groups
+
+def loadLegend(legendConfig=None):
+    if legendConfig is None:
+        legendConfig = dict()
+    return Legend(**legendConfig)
