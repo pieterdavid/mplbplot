@@ -258,7 +258,7 @@ class Legend(BaseYAMLObject):
             }
     def __init__(self, **kwargs):
         super(Legend, self).__init__(**kwargs)
-        if self.position is not None:
+        if not isinstance(self.position, Position):
             self.position = Position(*self.position)
         self.entries = [ Legend.Entry(**entryNd) for entryNd in self.entries ]
 

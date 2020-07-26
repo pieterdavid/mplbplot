@@ -57,7 +57,7 @@ class File(object):
         self._tFile = None
         self.scale = File._getScale(self.cfg, config)
         self.systematics = dict((syst.name, syst) for syst in systematics if self.cfg.type != "DATA" and syst.on(self.name, self.cfg))
-        logger.debug("Scale for file {0.name}: {0.scale:f}; systematics: {0.systematics!s}".format(self))
+        logger.debug("Scale for file {0.name}: {0.scale:e}; systematics: {0.systematics!s}".format(self))
     @lazyload
     def tFile(self):
         from cppyy import gbl
@@ -154,7 +154,7 @@ class FileHist(BaseHist):
     In addition, references to the sample :py:class:`~plotit.plotit.File`
     and :py:class:`~plotit.config.Plot` are held.
     """
-    __slots__ = ("name", "_tFile", "plot", "hFile", "systVars")
+    __slots__ = ("name", "_tFile", "plot", "hFile", "systVars", "_syst2")
     def __init__(self, name=None, tFile=None, plot=None, hFile=None, systVars=None):
         """ Histogram key constructor. The object is read on first use, and cached.
 
@@ -169,6 +169,7 @@ class FileHist(BaseHist):
         self.plot = plot
         self.hFile = hFile
         self.systVars = systVars
+        self._syst2 = None
     @property
     def tFile(self): ## only called if not constructed explicitly
         return self.hFile.tFile
@@ -217,6 +218,9 @@ class FileHist(BaseHist):
         return getattr(self.hFile.cfg, name)
     def __repr__(self):
         return "FileHist({0.name!r}, {0.hFile!r})".format(self)
+    @lazyload
+    def syst2(self):
+        return self.getCombinedSyst2(self.systVars)
 
 class SumHist(BaseHist):
     """
@@ -570,6 +574,7 @@ def inspectConfig():
     logging.basicConfig(level=(logging.DEBUG if args.verbose else logging.INFO))
     config, samples, plots, systematics, legend = loadFromYAML(args.yamlFile, histodir=histodir, eras=args.eras)
     import IPython
+    plots = { p.name: p for p in plots }
     IPython.embed()
 
 def plotIt_cli():
