@@ -321,6 +321,12 @@ class Configuration(BaseYAMLObject):
             , "y-axis-right-ticks"        : True
             , "blinded-range-fill-color"  : 42   ## TODO ???
             , "blinded-range-fill-style"  : 1001 ## TODO ???
+            #
+            , "yields-table-stretch"      : 1.15
+            , "yields-table-align"        : "h" ## TODO this one
+            , "yields-table-text-align"   : "c"
+            , "yields-table-numerical-precision-yields" : 1
+            , "yields-table-numerical-precision-ratio" : 2
             }
     def __init__(self, **kwargs):
         super(Configuration, self).__init__(**kwargs)
