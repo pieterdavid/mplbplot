@@ -65,7 +65,7 @@ class File(object):
         if not tf:
             logger.error("Could not open file {0}".format(self.path))
         return tf
-    def getHist(self, plot, name=None):
+    def getHist(self, plot, name=None, eras=None):
         """ Get the histogram for the combination of ``plot`` and this file/sample """
         hk = FileHist(hFile=self, plot=plot, name=name)
         from .systematics import SystVarsForHist
@@ -98,9 +98,9 @@ class Group(object):
         self.name = name
         self.cfg = gCfg
         self.files = files
-    def getHist(self, plot):
+    def getHist(self, plot, eras=None):
         """ Get the histogram for the combination of ``plot`` and this group of samples """
-        return GroupHist(self, [ f.getHist(plot) for f in self.files ])
+        return GroupHist(self, [ f.getHist(plot) for f in self.files if eras is None or f.cfg.era == eras or f.cfg.era in eras ])
     def __repr__(self):
         return "Group({0.name!r}, {0.files!r})".format(self)
 
@@ -241,7 +241,7 @@ class SumHist(BaseHist):
         ## TODO some kind of axis compatibility test (delayed, then, in contributions() or its users)
         self.entries.append(entry)
         if clearTotal:
-            self.total.clear()
+            self.clear()
     def clear(self):
         if self._contents is not None:
             self._contents = None
