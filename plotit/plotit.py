@@ -190,7 +190,7 @@ class FileHist(BaseHist):
             raise RuntimeError("File '{}'cannot be read".format(self.tFile))
         res = self.tFile.Get(self.name)
         if not res:
-            raise KeyError("Could not retrieve key '{0}' from file {1!r}".format(self.name, self.tFile))
+            raise KeyError("Could not retrieve key '{0}' from file {1}".format(self.name, (self.tFile.GetName() if self.tFile else repr(self.tFile))))
         ## scale/rebin/crop if needed
         scale = self.hFile.scale
         rebin = self.plot.rebin

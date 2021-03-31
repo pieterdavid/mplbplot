@@ -182,7 +182,7 @@ class ShapeSystVar(SystVar):
                     if ( not vf ) or vf.IsZombie() or ( not vf.IsOpen() ):
                         raise IOError("Could not open file '{}' correctly".format(variPath))
                     if vf.Get(self.hist.name):
-                        return self.hist.clone(tfile=vf)
+                        return self.hist.clone(tFile=vf)
                     else:
                         logger.error("Could not find '{0}' in file '{1}'".format(self.hist.name, variPath))
                         #raise KeyError()
